@@ -1754,3 +1754,8 @@ html.bm-clear #root {
 .bm-eco-meter.over i {
   background: rgba(255, 79, 109, 0.3);
 }
+.bm-voice-note {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  opacity: 0.6;
+}

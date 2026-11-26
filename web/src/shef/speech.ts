@@ -262,8 +262,8 @@ function chunks(t: string): string[] {
   const out: string[] = []
   let cur = ''
   for (const s of sents) {
-    // первый кусок — одна короткая фраза: её озвучка готова быстрее всего, Гудвин начинает говорить почти сразу
-    if (cur && (out.length === 0 || (cur + s).length > 260)) {
+    // первый кусок — одна короткая фраза (озвучка готова быстрее), остальное — крупно: каждый кусок тратит лимит голоса
+    if (cur && (out.length === 0 || (cur + s).length > 700)) {
       out.push(cur.trim())
       cur = ''
     }
@@ -273,9 +273,15 @@ function chunks(t: string): string[] {
   return out
 }
 
-/** Если Gemini-голос недавно тормозил — какое-то время говорим голосом устройства сразу, без ожидания. */
-let geminiSlowUntil = 0
-const FIRST_WAIT = 5000
+/**
+ * Один голос всегда: если выбран облачный голос, он НЕ подменяется голосом устройства посреди ответа.
+ * Не успел или кончился лимит — ответ остаётся текстом на экране, а под шаром видно почему.
+ */
+const FIRST_WAIT = 12000
+/** Голос недоступен: причина для экрана («лимит голоса Gemini на сегодня»). */
+function voiceDown(why: string) {
+  window.dispatchEvent(new CustomEvent('bm:voice-down', { detail: why }))
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error('slow')), ms))])
@@ -311,7 +317,11 @@ async function sayInner(t: string, my: number, go: () => void): Promise<void> {
     return playBlob(`${import.meta.env.BASE_URL}shef/voice/${c}`)
   }
   const spoken = speakable(t)
-  if (voiceEngine() !== 'system' && navigator.onLine && Date.now() > geminiSlowUntil) {
+  if (voiceEngine() !== 'system') {
+    if (!navigator.onLine) {
+      go()
+      return voiceDown('нет интернета — голос недоступен, отвечаю текстом')
+    }
     const parts = chunks(spoken)
     const jobs = parts.map((p, i) => (i < 2 ? geminiAudio(p) : null))
     let i = 0
@@ -319,7 +329,7 @@ async function sayInner(t: string, my: number, go: () => void): Promise<void> {
       for (; i < parts.length; i++) {
         if (my !== stopped) return
         // ждём звук не дольше нескольких секунд — иначе Гудвин заговорит через минуту, невпопад
-        const blob = await withTimeout(jobs[i] || geminiAudio(parts[i]), i === 0 ? FIRST_WAIT : 9000)
+        const blob = await withTimeout(jobs[i] || geminiAudio(parts[i]), i === 0 ? FIRST_WAIT : 15000)
         if (i + 2 < parts.length) jobs[i + 2] = geminiAudio(parts[i + 2]) // следующий кусок готовится, пока играет этот
         if (my !== stopped) return
         const url = URL.createObjectURL(blob)
@@ -330,10 +340,10 @@ async function sayInner(t: string, my: number, go: () => void): Promise<void> {
       return
     } catch (e) {
       if (my !== stopped) return
-      if (e instanceof Error && e.message === 'slow') geminiSlowUntil = Date.now() + 5 * 60000
-      // лимит, сеть или медленно — дочитываем голосом устройства то, что ещё не прозвучало
+      // другим голосом НЕ дочитываем — текст и так на экране
       go()
-      return systemSay(parts.slice(i).join(' '))
+      const limit = e instanceof Error && /limit|429|quota/i.test(e.message + ((e as { code?: string }).code || ''))
+      return voiceDown(limit ? 'лимит облачного голоса на сегодня исчерпан — отвечаю текстом' : 'облачный голос не ответил — отвечаю текстом')
     }
   }
   go()

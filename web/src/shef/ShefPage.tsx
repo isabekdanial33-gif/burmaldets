@@ -109,6 +109,13 @@ function Assistant() {
   const halt = useRef(false)
   /** Что сейчас делает на компьютере («Нажимаю «Сохранить»») — видно под шаром. */
   const [act, setAct] = useState('')
+  // голос недоступен (лимит/сеть) — другим голосом не подменяем, просто говорим почему ответ текстом
+  const [voiceNote, setVoiceNote] = useState('')
+  useEffect(() => {
+    const f = (e: Event) => setVoiceNote(String((e as CustomEvent).detail || ''))
+    window.addEventListener('bm:voice-down', f)
+    return () => window.removeEventListener('bm:voice-down', f)
+  }, [])
   useEffect(() => {
     const f = (e: Event) => setAct(String((e as CustomEvent).detail || ''))
     window.addEventListener('bm:act', f)
@@ -149,6 +156,7 @@ function Assistant() {
       }
       busy.current = true
       halt.current = false
+      setVoiceNote('')
       stopWake()
       setLink(null)
       ui.link = null
@@ -483,6 +491,7 @@ function Assistant() {
           {reply && phase !== 'listen' && card?.kind !== 'news' && <p className="bm-reply">{reply}</p>}
           {card && phase !== 'listen' && <CardView card={card} />}
           {status && <p className="bm-status">{status}</p>}
+          {voiceNote && <p className="bm-voice-note">🔇 {voiceNote}</p>}
           {idle && (
             <div className="bm-tips" aria-label="Примеры команд">
               {tips.map((t) => (
