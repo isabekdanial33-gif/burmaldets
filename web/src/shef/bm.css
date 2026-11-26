@@ -1,4 +1,4 @@
-/* Бурмалдец — дизайн-система: глубокий космос, северное сияние, стекло и неоновый градиент. */
+/* Гудвин — дизайн-система: глубокий космос, северное сияние, стекло и неоновый градиент. */
 @import '@fontsource-variable/unbounded/index.css';
 @import '@fontsource-variable/manrope/index.css';
 @import '@fontsource-variable/jetbrains-mono/index.css';
@@ -1486,7 +1486,7 @@ html.bm-clear #root {
   color: rgba(225, 232, 255, 0.68);
 }
 
-/* «Стоп» — вместо микрофона, пока Бурмалдец думает или говорит */
+/* «Стоп» — вместо микрофона, пока Гудвин думает или говорит */
 .bm-mic.bm-stop {
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.22), transparent 45%), linear-gradient(135deg, #ff4f6d, #ff7a45) !important;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset, 0 10px 34px rgba(255, 79, 109, 0.5), 0 0 40px rgba(255, 122, 69, 0.25);
@@ -1554,4 +1554,203 @@ html.bm-clear #root {
 }
 .bm-acc-form .bm-btn {
   justify-self: start;
+}
+.bm-acc-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  opacity: 0.85;
+  margin-left: auto;
+}
+.bm-acc-form .bm-acc-auto {
+  margin-left: 0;
+}
+
+/* чаты и проекты */
+.bm-chats {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px max(14px, env(safe-area-inset-bottom));
+  background: rgba(3, 4, 10, 0.94);
+  backdrop-filter: blur(20px);
+  animation: bm-fade 0.22s;
+  overflow-y: auto;
+  text-align: left;
+}
+.bm-chats .bm-set-top {
+  margin: 0 -14px;
+}
+.bm-chats h2 {
+  margin: 0;
+  text-align: center;
+  font: 700 18px var(--bm-display, inherit);
+}
+.bm-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bm-proj {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bm-proj-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px;
+  font-size: 14px;
+}
+.bm-proj-h span {
+  display: flex;
+  gap: 12px;
+}
+.bm-chat-row {
+  display: flex;
+  text-align: left;
+  padding: 11px 14px !important;
+  border-radius: 14px;
+  border: 1px solid var(--bm-line) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+.bm-chat-row.on {
+  border-color: rgba(60, 231, 255, 0.5) !important;
+  background: rgba(60, 231, 255, 0.07) !important;
+}
+.bm-chat-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.bm-chat-row b {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bm-chat-row small {
+  opacity: 0.55;
+  font-size: 12px;
+}
+.bm-chat-title {
+  min-width: 0;
+  text-align: center;
+  font: 700 16px var(--bm-text);
+  color: var(--bm-ink);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.bm-chat-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.bm-chat-meta select,
+.bm-agent-edit select,
+.bm-agent-edit input,
+.bm-agent-edit textarea,
+.bm-chats .bm-field input,
+.bm-chats .bm-field textarea,
+.bm-chats .bm-field select {
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bm-line2);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--bm-ink);
+  font: 500 14px var(--bm-text);
+}
+.bm-log {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+}
+.bm-msg {
+  position: relative;
+  max-width: 86%;
+  margin: 0;
+  padding: 9px 13px 18px;
+  border-radius: 16px;
+  font-size: 14.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.bm-msg.u {
+  align-self: flex-end;
+  background: linear-gradient(135deg, rgba(60, 231, 255, 0.18), rgba(125, 92, 255, 0.22));
+  border-bottom-right-radius: 5px;
+}
+.bm-msg.a {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom-left-radius: 5px;
+}
+.bm-msg time {
+  position: absolute;
+  right: 10px;
+  bottom: 3px;
+  font-size: 10px;
+  opacity: 0.45;
+}
+
+/* агенты, эко-лимит */
+.bm-agents,
+.bm-agent-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bm-tag {
+  font-style: normal;
+  font-size: 10px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  border-radius: 6px;
+  color: #050816;
+  background: var(--bm-grad);
+  vertical-align: middle;
+}
+.bm-eco {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.bm-eco-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.bm-eco-row .bm-field {
+  margin: 0;
+}
+.bm-eco-meter {
+  position: relative;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--bm-line);
+  overflow: hidden;
+  font-size: 13px;
+}
+.bm-eco-meter span {
+  position: relative;
+  z-index: 1;
+}
+.bm-eco-meter i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, rgba(60, 231, 255, 0.18), rgba(125, 92, 255, 0.25));
+}
+.bm-eco-meter.over i {
+  background: rgba(255, 79, 109, 0.3);
 }

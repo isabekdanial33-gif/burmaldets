@@ -1,5 +1,5 @@
-// Бурмалдец для Windows: шар поверх всех окон, панель-разговор рядом с ним, значок в трее, Ctrl+Alt+Пробел.
-// «Мозг» (веб-ядро из ../web) живёт в панели постоянно — даже скрытой — и слушает «Бурмалдец»/«Чекунец».
+// Гудвин для Windows: шар поверх всех окон, панель-разговор рядом с ним, значок в трее, Ctrl+Alt+Пробел.
+// «Мозг» (веб-ядро из ../web) живёт в панели постоянно — даже скрытой — и слушает «Гудвин».
 const { app, BrowserWindow, ipcMain, protocol, net, Tray, Menu, globalShortcut, screen, session, nativeImage, shell } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
@@ -11,7 +11,9 @@ const hands = new Hands()
 let phase = 'idle'
 
 // проверка рядом с установленной копией: BM_PROFILE=папка — свой профиль и своя блокировка второго запуска
+// профиль (настройки, ключ, чаты) остаётся в прежней папке и после смены имени на «Гудвин»
 if (process.env.BM_PROFILE) app.setPath('userData', process.env.BM_PROFILE)
+else app.setPath('userData', path.join(app.getPath('appData'), 'Бурмалдец'))
 if (!app.requestSingleInstanceLock()) app.quit()
 app.setAppUserModelId('com.burmaldets.desktop')
 // звук и распознавание в фоне не должны «засыпать»
@@ -62,7 +64,7 @@ function createPanel() {
     minHeight: 520,
     alwaysOnTop: true,
     skipTaskbar: false,
-    title: 'Бурмалдец',
+    title: 'Гудвин',
     icon: icon(),
     backgroundColor: '#00000000',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: false, contextIsolation: true, sandbox: false },
@@ -129,7 +131,7 @@ function summon() {
   emit('wake', { sheet: false })
 }
 
-/** Пока Бурмалдец работает мышью, панель прозрачна и пропускает клики — чтобы не закрывать окно, в котором он работает. */
+/** Пока Гудвин работает мышью, панель прозрачна и пропускает клики — чтобы не закрывать окно, в котором он работает. */
 let acting = false
 function ghost(on) {
   acting = on
@@ -192,12 +194,12 @@ function setOrb(on) {
 function buildTray() {
   if (!tray) {
     tray = new Tray(icon().resize({ width: 16, height: 16 }))
-    tray.setToolTip('Бурмалдец — скажите «Бурмалдец» или Ctrl+Alt+Пробел')
+    tray.setToolTip('Гудвин — скажите «Гудвин» или Ctrl+Alt+Пробел')
     tray.on('click', () => (panel.isVisible() ? hidePanel() : showPanel()))
   }
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Позвать Бурмалдеца', click: summon },
+      { label: 'Позвать Гудвина', click: summon },
       { label: 'Открыть панель', click: showPanel },
       { label: prefs.orb !== false ? 'Спрятать шар' : 'Показать шар', click: () => setOrb(prefs.orb === false) },
       { label: 'Запускать вместе с Windows', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (m) => app.setLoginItemSettings({ openAtLogin: m.checked }) },
@@ -304,6 +306,8 @@ ipcMain.handle('bm:call', async (_e, method, a = {}) => {
       } catch (e) {
         return { ok: false, error: String(e.message || e) }
       }
+    case 'accAuto':
+      return { ok: true, list: accounts.setAuto(String(a.id || ''), !!a.on) }
     case 'accRemove':
       return { ok: true, list: accounts.remove(String(a.id || '')) }
     case 'pcLogin': {
@@ -347,7 +351,7 @@ ipcMain.handle('bm:call', async (_e, method, a = {}) => {
       buildTray()
       return { ok: true, orb: prefs.orb !== false, autostart: app.getLoginItemSettings().openAtLogin }
     case 'screenRead': {
-      // прячем саму панель, чтобы на снимке был экран пользователя, а не Бурмалдец
+      // прячем саму панель, чтобы на снимке был экран пользователя, а не Гудвин
       const vis = panel?.isVisible()
       if (vis) panel.setOpacity(0)
       await new Promise((r) => setTimeout(r, 180))

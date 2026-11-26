@@ -8,7 +8,6 @@ import { EDGE_VOICES, GEMINI_VOICES, OPENAI_VOICES, getRate, getVoiceName, say, 
 import { deskCall } from './tools'
 import { IBack, ICheck, IExt, IEye } from './Icons'
 import Holo from './Holo'
-import WakeTrain, { canTrain } from './WakeTrain'
 
 export function openExternal(url: string) {
   if (isAndroid) nativeCall('openUrl', { url }, 5000).catch(() => {})
@@ -341,7 +340,7 @@ export function VoicePanel() {
         <span>Скорость речи · {Math.round(rate * 100)}%</span>
         <input type="range" min={0.7} max={1.5} step={0.05} value={rate} onChange={(e) => setR(setRate(Number(e.target.value)))} />
       </label>
-      <button className="bm-btn ghost" onClick={() => (unlockAudio(), say('Привет! Я Бурмалдец. Голос работает.'))}>
+      <button className="bm-btn ghost" onClick={() => (unlockAudio(), say('Привет! Я Гудвин. Голос работает.'))}>
         ▶ Проверить голос
       </button>
     </div>
@@ -365,7 +364,7 @@ export function PermsPanel() {
   const rows: [keyof Perms, string, string][] = [
     ['mic', 'Микрофон', 'чтобы слышать вас'],
     ['overlay', 'Поверх других окон', 'плавающая кнопка и ответы поверх приложений'],
-    ['notifications', 'Уведомления', 'напоминания и «Бурмалдец слушает»'],
+    ['notifications', 'Уведомления', 'напоминания и «Гудвин слушает»'],
     ['battery', 'Без экономии батареи', 'чтобы Android не усыплял слух'],
     ['access', 'Управление телефоном', 'видеть экран и нажимать за вас (по желанию)'],
   ]
@@ -393,7 +392,7 @@ export function PermsPanel() {
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0)
   const cfg = useCfg()
-  const steps = ['hello', 'brain', 'voice', ...(isAndroid ? ['perms'] : []), ...(canTrain ? ['name'] : []), 'done']
+  const steps = ['hello', 'brain', 'voice', ...(isAndroid ? ['perms'] : []), 'done']
   const cur = steps[step]
   const next = () => setStep((s) => Math.min(steps.length - 1, s + 1))
   const back = () => setStep((s) => Math.max(0, s - 1))
@@ -432,9 +431,9 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
             <Holo phase="idle" emotion="радость" bare />
           </div>
           <p className="bm-kicker">ПЕРСОНАЛЬНЫЙ ИИ-АССИСТЕНТ</p>
-          <h1 className="bm-title">Бурмалдец</h1>
+          <h1 className="bm-title">Гудвин</h1>
           <p className="bm-sub">
-            Он же <b>Чекунец</b>. Позовите по имени или нажмите на плавающую кнопку — отвечу голосом, найду, напомню, включу, посмотрю на экран.
+            Позовите по имени или нажмите на плавающую кнопку — отвечу голосом, найду, напомню, включу, посмотрю на экран.
           </p>
           <button className="bm-btn big" onClick={next}>
             Начать
@@ -475,28 +474,11 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
         <div className="bm-onb-body">
           <p className="bm-kicker">ШАГ 3 · ДОСТУП</p>
           <h2 className="bm-h2">Чтобы я был рядом всегда</h2>
-          <p className="bm-hint">Плавающая кнопка живёт поверх всех приложений, а на слово «Бурмалдец» или «Чекунец» я просыпаюсь даже при выключенном экране.</p>
+          <p className="bm-hint">Плавающая кнопка живёт поверх всех приложений, а на слово «Гудвин» я просыпаюсь даже при выключенном экране.</p>
           <PermsPanel />
           <div className="bm-onb-foot">
             <button className="bm-btn big" onClick={next}>
               Дальше
-            </button>
-          </div>
-        </div>
-      )}
-
-      {cur === 'name' && (
-        <div className="bm-onb-body">
-          <p className="bm-kicker">ШАГ {step} · ИМЯ</p>
-          <h2 className="bm-h2">Научите меня узнавать ваш голос</h2>
-          <p className="bm-hint">Так я буду откликаться на «Бурмалдец» и «Чекунец» именно у вас — займёт полминуты.</p>
-          <WakeTrain />
-          <div className="bm-onb-foot">
-            <button className="bm-btn big" onClick={next}>
-              Дальше
-            </button>
-            <button className="bm-linkbtn" onClick={next}>
-              Пропустить — сделаю потом в настройках
             </button>
           </div>
         </div>
@@ -509,7 +491,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           </div>
           <h2 className="bm-title sm">Готово</h2>
           <p className="bm-sub">
-            Скажите <b>«Бурмалдец»</b> или <b>«Чекунец»</b>
+            Скажите <b>«Гудвин»</b>
             {isAndroid ? ' — или нажмите на плавающую кнопку.' : isDesktop ? ', нажмите на шар на рабочем столе или Ctrl+Alt+Пробел.' : ' — или нажмите на шар.'}
           </p>
           <button className="bm-btn big" onClick={finish}>

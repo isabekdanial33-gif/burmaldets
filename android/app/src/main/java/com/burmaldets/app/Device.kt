@@ -17,7 +17,7 @@ import android.view.KeyEvent
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Что Бурмалдец умеет делать с телефоном. Всё возвращает JSON: ok + что произошло — Gemini пересказывает это человеку. */
+/** Что Гудвин умеет делать с телефоном. Всё возвращает JSON: ok + что произошло — Gemini пересказывает это человеку. */
 class Device(private val act: Context) {
     private fun go(i: Intent) = act.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     private val pm: PackageManager = act.packageManager
@@ -141,7 +141,7 @@ class Device(private val act: Context) {
         return JSONObject().put("ok", true).put("contacts", arr)
     }
 
-    /** Звонок. Вызывается ТОЛЬКО после «да» пользователя (это проверяет Бурмалдец). Без разрешения на звонки — открываем номеронабиратель. */
+    /** Звонок. Вызывается ТОЛЬКО после «да» пользователя (это проверяет Гудвин). Без разрешения на звонки — открываем номеронабиратель. */
     fun call(number: String, direct: Boolean): JSONObject {
         val n = number.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }
         if (n.length < 2) return JSONObject().put("ok", false).put("error", "нет номера")
@@ -523,7 +523,7 @@ class Device(private val act: Context) {
     }
 
     private fun needWrite() = JSONObject().put("ok", false).put("error", "need_write_settings")
-        .put("tell_user", "Нужно разрешить Бурмалдецу «Изменение системных настроек» — открываю этот экран, включите переключатель и повторите.")
+        .put("tell_user", "Нужно разрешить Гудвину «Изменение системных настроек» — открываю этот экран, включите переключатель и повторите.")
 
     fun setRingtone(name: String, type: String): JSONObject {
         if (!android.provider.Settings.System.canWrite(act)) return needWrite()
@@ -560,7 +560,7 @@ class Device(private val act: Context) {
     fun setRingtoneFile(src: android.net.Uri, type: String): JSONObject {
         if (!android.provider.Settings.System.canWrite(act)) return needWrite()
         return try {
-            var name = "Бурмалдец мелодия"
+            var name = "Гудвин мелодия"
             act.contentResolver.query(src, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) name = it.getString(0) ?: name }
             val mime = act.contentResolver.getType(src) ?: "audio/mpeg"
             val v = android.content.ContentValues().apply {

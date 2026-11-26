@@ -19,10 +19,10 @@ const SECTIONS: { title: string; items: string[]; only?: Mode; pc?: boolean; pho
 
 export default function Help({ mode, onClose, onPick }: { mode: Mode; onClose: () => void; onPick: (t: string) => void }) {
   return (
-    <div className="shef-settings" role="dialog" aria-label="Что умеет Бурмалдец" onClick={onClose}>
+    <div className="shef-settings" role="dialog" aria-label="Что умеет Гудвин" onClick={onClose}>
       <div className="shef-set-card shef-help" onClick={(e) => e.stopPropagation()}>
         <h2>Что я умею</h2>
-        <p className="shef-help-lead">Скажите «Бурмалдец» и любую фразу своими словами — или нажмите на пример.</p>
+        <p className="shef-help-lead">Скажите «Гудвин» и любую фразу своими словами — или нажмите на пример.</p>
         {SECTIONS.filter((s) => (!s.only || s.only === mode) && (s.pc ? isDesktop : s.phone ? !isDesktop : true)).map((s) => (
           <section key={s.title}>
             <h3>{s.title}</h3>

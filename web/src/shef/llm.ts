@@ -1,7 +1,8 @@
-// Разговор с ИИ. Внутри Бурмалдец думает в формате Gemini (Content/Part), а для других провайдеров
+// Разговор с ИИ. Внутри Гудвин думает в формате Gemini (Content/Part), а для других провайдеров
 // запрос и ответ переводятся: OpenAI-совместимые (OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, свой сервер) и Anthropic.
 // Если модель перегружена или молчит — параллельно спрашиваем запасную (см. hedged).
-import { authHeaders, baseFor, getCfg, keyFor, provider, type ProviderId } from './ai'
+import { authHeaders, baseFor, getCfg, keyFor, provider, type Brain, type ProviderId } from './ai'
+import { addUsage, overLimit, tokensOf } from './usage'
 import { http } from './net'
 
 export type Part = {
@@ -155,16 +156,31 @@ export function fromAnthropic(j: { content?: { type: string; text?: string; id?:
 }
 
 /** Один запрос к выбранному провайдеру. Ответ всегда в виде Gemini: {candidates:[{content:{parts}}]}. */
-async function raw(pid: ProviderId, model: string, body: Body, timeoutMs: number): Promise<Raw> {
+/** Один запрос. brain — ключ и адрес агента (иначе — из основных настроек). */
+async function raw(pid: ProviderId, model: string, body: Body, timeoutMs: number, brain?: Brain): Promise<Raw> {
   const p = provider(pid)
-  const base = baseFor(pid)
-  const headers = { 'Content-Type': 'application/json', ...authHeaders(pid) }
+  const b = brain && brain.provider === pid ? brain : null
+  const base = (b?.base || '').trim().replace(/\/+$/, '') || baseFor(pid)
+  const headers = { 'Content-Type': 'application/json', ...authHeaders(pid, b?.key) }
+  const who = b?.who || 'main'
   if (p.kind === 'gemini') {
-    return http(`${base}/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers, body: JSON.stringify(body) }, timeoutMs)
+    const r = await http(`${base}/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers, body: JSON.stringify(body) }, timeoutMs)
+    if (r.status === 200)
+      try {
+        addUsage(tokensOf(JSON.parse(r.body)), who)
+      } catch {
+        /* пусто */
+      }
+    return r
   }
   const isA = p.kind === 'anthropic'
   const r = await http(isA ? base + '/messages' : base + '/chat/completions', { method: 'POST', headers, body: JSON.stringify(isA ? toAnthropic(model, body) : toOpenAI(model, body)) }, timeoutMs)
   if (r.status !== 200) return r
+  try {
+    addUsage(tokensOf(JSON.parse(r.body)), who)
+  } catch {
+    /* пусто */
+  }
   try {
     const parts = isA ? fromAnthropic(JSON.parse(r.body)) : fromOpenAI(JSON.parse(r.body))
     return { status: 200, body: JSON.stringify({ candidates: [{ content: { role: 'model', parts } }] }) }
@@ -218,7 +234,7 @@ async function chain(pid: ProviderId, models: string[], body: Body, perModel: nu
  * Страхующие запросы: если модель молчит дольше HEDGE_MS — параллельно спрашиваем следующую и берём первый ответ.
  * Отказ (перегрузка/лимит) — сразу следующая.
  */
-function hedged(pid: ProviderId, models: string[], body: Body, perModel: number, budget: number, hedgeMs = HEDGE_MS): Promise<{ model: string; json: Record<string, unknown> }> {
+function hedged(pid: ProviderId, models: string[], body: Body, perModel: number, budget: number, hedgeMs = HEDGE_MS, brain?: Brain): Promise<{ model: string; json: Record<string, unknown> }> {
   const end = Date.now() + budget
   const live = models.filter((m) => (cooldown.get(m) || 0) < Date.now())
   const order = live.length ? live : models
@@ -254,7 +270,7 @@ function hedged(pid: ProviderId, models: string[], body: Body, perModel: number,
       }
       pending++
       inflight.add(model)
-      raw(pid, model, body, Math.min(perModel, left)).then(
+      raw(pid, model, body, Math.min(perModel, left), brain).then(
         (r) => {
           pending--
           inflight.delete(model)
@@ -306,22 +322,31 @@ export function chatModels(): string[] {
   return [...new Set(list)]
 }
 
-export async function chat(body: Body): Promise<{ model: string; content: Content }> {
+export async function chat(body: Body, brain?: Brain): Promise<{ model: string; content: Content }> {
+  const lim = overLimit()
+  if (lim) throw new LlmError('quota', lim)
   const c = getCfg()
-  if (!c.model || (c.provider !== 'custom' && !keyFor(c.provider))) throw new LlmError('no_key')
+  const pid = brain?.provider || c.provider
+  const key = brain ? (brain.key ?? keyFor(pid)) : keyFor(pid)
+  const model0 = brain ? brain.model : c.model
+  if (!model0 || (pid !== 'custom' && !key)) throw new LlmError('no_key')
   // локальные модели думают дольше — даём им больше времени
-  const slow = c.provider === 'custom'
-  const { model, json } = await hedged(c.provider, chatModels(), body, slow ? 45000 : 12000, slow ? 50000 : 16000)
+  const slow = pid === 'custom'
+  // у агента тоже есть запасные: перегружена его модель — берём соседнюю того же провайдера (с тем же ключом)
+  const models = brain
+    ? [...new Set([brain.model, ...(brain.backup?.length ? brain.backup : pid === 'gemini' ? provider('gemini').models.filter((m) => m !== brain.model).slice(0, 2) : [])])]
+    : chatModels()
+  const { model, json } = await hedged(pid, models, body, slow ? 45000 : 12000, slow ? 50000 : 16000, HEDGE_MS, brain)
   const cand = (json.candidates as { content?: Content }[] | undefined)?.[0]
   if (!cand?.content?.parts?.length) throw new LlmError('empty', JSON.stringify(json).slice(0, 300))
   return { model, content: { role: 'model', parts: cand.content.parts } }
 }
 
 /** Короткая проверка: модель отвечает? (для экрана настройки) */
-export async function ping(pid: ProviderId, model: string): Promise<{ ok: boolean; ms: number; text?: string; error?: string }> {
+export async function ping(pid: ProviderId, model: string, brain?: Brain): Promise<{ ok: boolean; ms: number; text?: string; error?: string }> {
   const t = Date.now()
   try {
-    const r = await raw(pid, model, { contents: [{ role: 'user', parts: [{ text: 'Ответь одним словом: привет' }] }], generationConfig: { maxOutputTokens: 400 } }, 30000)
+    const r = await raw(pid, model, { contents: [{ role: 'user', parts: [{ text: 'Ответь одним словом: привет' }] }], generationConfig: { maxOutputTokens: 400 } }, 30000, brain)
     if (r.status !== 200) return { ok: false, ms: Date.now() - t, error: `${r.status}: ${r.body.slice(0, 200)}` }
     const parts = (JSON.parse(r.body).candidates?.[0]?.content?.parts || []) as Part[]
     return { ok: true, ms: Date.now() - t, text: parts.map((p) => (p.thought ? '' : p.text || '')).join('').trim() }
@@ -365,7 +390,7 @@ export function cloudStt(): ProviderId | null {
   return null
 }
 
-export async function transcribe(audio: Blob): Promise<string> {
+export async function transcribe(audio: Blob, hint = ''): Promise<string> {
   const pid = cloudStt()
   if (!pid) throw new LlmError('no_key')
   const bytes = new Uint8Array(await audio.arrayBuffer())
@@ -388,6 +413,7 @@ export async function transcribe(audio: Blob): Promise<string> {
   const chunks = [
     head('model'), enc.encode(provider(pid).stt + '\r\n'),
     head('language'), enc.encode('ru\r\n'),
+    ...(hint ? [head('prompt'), enc.encode(hint + '\r\n')] : []),
     head('file', `; filename="speech.${ext}"\r\nContent-Type: ${audio.type.split(';')[0] || 'audio/webm'}`), bytes, enc.encode(`\r\n--${bnd}--\r\n`),
   ]
   const all = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0))
@@ -401,6 +427,42 @@ export async function transcribe(audio: Blob): Promise<string> {
   const r = await http(baseFor(pid) + '/audio/transcriptions', { method: 'POST', headers: { 'Content-Type': 'multipart/form-data; boundary=' + bnd, ...authHeaders(pid), 'x-body-b64': '1' }, body: btoa(s) }, 15000)
   if (r.status !== 200) throw new LlmError(r.status === 429 ? 'limit' : 'busy', r.body.slice(0, 200))
   return (JSON.parse(r.body).text || '').trim()
+}
+
+/**
+ * Вторая проверка слова-активатора на компьютере: действительно ли прозвучало «Гудвин».
+ * Gemini отвечает «да/нет» по звуку; Whisper (Groq/OpenAI) записывает речь с подсказкой этих слов.
+ * null — проверить нечем или облако не успело: тогда решает распознаватель на компьютере.
+ */
+export async function verifyName(audio: Blob, ms = 3000): Promise<boolean | null> {
+  const pid = cloudStt()
+  if (!pid) return null
+  const timeout = new Promise<null>((ok) => setTimeout(() => ok(null), ms))
+  const job = (async (): Promise<boolean | null> => {
+    if (pid === 'gemini') {
+      const bytes = new Uint8Array(await audio.arrayBuffer())
+      let s = ''
+      for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      const body = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: 'Голосового ассистента зовут «Гудвин». Прозвучало ли в этой записи это имя — отчётливо, именно это слово (похожие обычные слова не считаются)? Ответь одним словом: да или нет.' },
+              { inlineData: { mimeType: 'audio/wav', data: btoa(s) } },
+            ],
+          },
+        ],
+        generationConfig: { temperature: 0, maxOutputTokens: 5, thinkingConfig: { thinkingLevel: 'minimal' } },
+      } as Body
+      const { json } = await hedged('gemini', ['gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-flash-latest'], body, ms, ms + 500, 1200)
+      const t = ((json.candidates as { content: { parts: Part[] } }[])[0]?.content.parts || []).map((p) => (p.thought ? '' : p.text || '')).join('').trim().toLowerCase()
+      return /^да/.test(t) ? true : /^нет/.test(t) ? false : null
+    }
+    const t = await transcribe(audio, 'Гудвин.')
+    return /гудвин|гуд вин|goodwin/i.test(t)
+  })().catch(() => null)
+  return Promise.race([job, timeout])
 }
 
 function wavHeader(len: number, rate: number) {

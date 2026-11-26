@@ -1,4 +1,4 @@
-// Настройки Бурмалдеца: разделы-карточки. Мозг, голос, активация, телефон/компьютер, память, журнал.
+// Настройки Гудвина: разделы-карточки. Мозг, голос, активация, телефон/компьютер, память, журнал.
 import { useEffect, useState } from 'react'
 import { provider, setCfg } from './ai'
 import { isAndroid, nativeCall } from './bridge'
@@ -10,6 +10,8 @@ import { isDesktop } from './net'
 import { canHear, getNight, say, setNight } from './speech'
 import { deskCall } from './tools'
 import { BrainPanel, openExternal, PermsPanel, useCfg, VoicePanel } from './Setup'
+import AgentsPanel from './AgentsPanel'
+import { getUsage, onUsage, overLimit } from './usage'
 import { IBack, IExt } from './Icons'
 import WakeTrain, { canTrain } from './WakeTrain'
 
@@ -53,7 +55,7 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
   const log = readLog()
   const p = provider(cfg.provider)
   return (
-    <div className="bm-settings" role="dialog" aria-label="Настройки Бурмалдеца">
+    <div className="bm-settings" role="dialog" aria-label="Настройки Гудвина">
       <div className="bm-set-top">
         <button className="bm-iconbtn" onClick={onClose} aria-label="Назад">
           <IBack />
@@ -80,6 +82,11 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
             title="Экономный режим"
             sub="Меньше токенов и запросов к ИИ: короче память разговора, инструменты — только нужные, экран компьютера — текстом, а не картинкой, несколько действий за один запрос."
           />
+          {cfg.eco !== false && <EcoLimits />}
+        </Sec>
+
+        <Sec id="agents" title="Агенты" sub="свои ИИ: отдельные ключи, модели, суб-агенты" open={open} onOpen={setOpen}>
+          <AgentsPanel />
         </Sec>
 
         {isDesktop && (
@@ -93,10 +100,10 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
           <Toggle on={night} onChange={(v) => (setN(v), setNight(v))} title="Ночью говорить тише" sub="С 23:00 до 7:00 примерно вдвое тише" />
         </Sec>
 
-        <Sec id="wake" title="Активация" sub="«Бурмалдец», «Чекунец», плавающая кнопка" open={open} onOpen={setOpen}>
+        <Sec id="wake" title="Активация" sub="«Гудвин», плавающая кнопка" open={open} onOpen={setOpen}>
           {isAndroid ? <AndroidWake /> : null}
           {!isAndroid && canHear && (
-            <Toggle on={wakeOn} onChange={setWakeOn} title="Слушать имя" sub={isDesktop ? 'Скажите «Бурмалдец» или «Чекунец» — распознаётся прямо на компьютере' : 'Пока открыта эта вкладка'} />
+            <Toggle on={wakeOn} onChange={setWakeOn} title="Слушать имя" sub={isDesktop ? 'Скажите «Гудвин» — распознаётся прямо на компьютере' : 'Пока открыта эта вкладка'} />
           )}
           {isDesktop && <DesktopWake />}
           {canTrain && <WakeTrain />}
@@ -124,7 +131,7 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
           </Sec>
         )}
 
-        <Sec id="mem" title="Память" sub="что Бурмалдец знает о вас" open={open} onOpen={setOpen}>
+        <Sec id="mem" title="Память" sub="что Гудвин знает о вас" open={open} onOpen={setOpen}>
           <MemoryPanel />
         </Sec>
 
@@ -142,7 +149,7 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
           </div>
         </Sec>
 
-        <Sec id="about" title="О приложении" sub="Бурмалдец · он же Чекунец" open={open} onOpen={setOpen}>
+        <Sec id="about" title="О приложении" sub="Гудвин · голосовой ассистент" open={open} onOpen={setOpen}>
           <p className="bm-hint">Ключи и память хранятся только на этом устройстве. Запросы идут напрямую к выбранному провайдеру ИИ.</p>
           <button className="bm-btn ghost sm" onClick={() => openExternal(REPO)}>
             Исходный код на GitHub <IExt size={14} />
@@ -167,10 +174,43 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
   )
 }
 
+/** Эко-лимит: сколько запросов и токенов ИИ в день; когда кончится — работают только навыки без ИИ. */
+function EcoLimits() {
+  const cfg = useCfg()
+  const [u, setU] = useState(getUsage())
+  useEffect(() => onUsage(() => setU(getUsage())), [])
+  const num = (v: string) => Math.max(0, Math.round(Number(v.replace(/\s/g, '')) || 0))
+  const over = overLimit()
+  return (
+    <div className="bm-eco">
+      <div className="bm-eco-row">
+        <label className="bm-field">
+          <span>Запросов в день</span>
+          <input inputMode="numeric" value={cfg.limitRequests ?? 0} onChange={(e) => setCfg({ limitRequests: num(e.target.value) })} />
+        </label>
+        <label className="bm-field">
+          <span>Токенов в день</span>
+          <input inputMode="numeric" value={cfg.limitTokens ?? 0} onChange={(e) => setCfg({ limitTokens: num(e.target.value) })} />
+        </label>
+      </div>
+      <small className="bm-note">0 — без лимита. Когда лимит кончится, ИИ до завтра не вызывается: работают погода, курсы, таймеры, заметки и другие навыки без ИИ.</small>
+      <div className={'bm-eco-meter' + (over ? ' over' : '')}>
+        <span>
+          Сегодня: <b>{u.requests}</b> запросов · <b>{u.tokens.toLocaleString('ru-RU')}</b> токенов
+        </span>
+        {(cfg.limitRequests || cfg.limitTokens) ? (
+          <i style={{ width: Math.min(100, Math.max(cfg.limitRequests ? (u.requests / cfg.limitRequests) * 100 : 0, cfg.limitTokens ? (u.tokens / cfg.limitTokens) * 100 : 0)) + '%' }} />
+        ) : null}
+      </div>
+      {over && <p className="bm-check bad">Лимит на сегодня исчерпан ({over}).</p>}
+    </div>
+  )
+}
+
 /** Сохранённые аккаунты (как в Джарвисе): шифруются Windows, модель видит только названия. */
 function Accounts() {
-  const [list, setList] = useState<{ id: string; name: string; site: string }[]>([])
-  const [f, setF] = useState({ name: '', site: '', login: '', password: '' })
+  const [list, setList] = useState<{ id: string; name: string; site: string; auto?: boolean }[]>([])
+  const [f, setF] = useState({ name: '', site: '', login: '', password: '', auto: true })
   const [msg, setMsg] = useState('')
   useEffect(() => {
     void deskCall('accList', {}).then((r) => setList((r.list as typeof list) || []))
@@ -180,13 +220,13 @@ function Accounts() {
     const r = await deskCall('accAdd', f)
     if (!r.ok) return setMsg(String(r.error || 'Не сохранилось'))
     setList(r.list as typeof list)
-    setF({ name: '', site: '', login: '', password: '' })
+    setF({ name: '', site: '', login: '', password: '', auto: true })
     setMsg('Сохранено и зашифровано.')
   }
   return (
     <div className="bm-acc">
       <p className="bm-hint">
-        Скажите «зайди в мой ВК» — Бурмалдец откроет страницу входа и после вашего «да» сам введёт логин и пароль. Они шифруются средствами Windows и хранятся только на этом
+        Скажите «зайди в мой ВК» — он откроет страницу входа и сам введёт логин и пароль (с галочкой «сам» — без вопроса, иначе после вашего «да»). Они шифруются средствами Windows и хранятся только на этом
         компьютере; ИИ их не видит и не произносит.
       </p>
       {list.map((a) => (
@@ -195,6 +235,10 @@ function Accounts() {
             <b>{a.name}</b>
             {a.site && <small>{a.site}</small>}
           </span>
+          <label className="bm-acc-auto" title="Входить самому без вопроса">
+            <input type="checkbox" checked={!!a.auto} onChange={(e) => deskCall('accAuto', { id: a.id, on: e.target.checked }).then((r) => setList(r.list as typeof list))} />
+            сам
+          </label>
           <button type="button" className="bm-chip" onClick={() => deskCall('accRemove', { id: a.id }).then((r) => setList(r.list as typeof list))}>
             Удалить
           </button>
@@ -205,6 +249,10 @@ function Accounts() {
         <input placeholder="Сайт: vk.com (необязательно)" value={f.site} onChange={(e) => setF({ ...f, site: e.target.value })} />
         <input placeholder="Логин, почта или телефон" value={f.login} onChange={(e) => setF({ ...f, login: e.target.value })} required autoComplete="off" />
         <input type="password" placeholder="Пароль" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required autoComplete="new-password" />
+        <label className="bm-acc-auto">
+          <input type="checkbox" checked={f.auto} onChange={(e) => setF({ ...f, auto: e.target.checked })} />
+          Входить самому, без вопроса «да/нет»
+        </label>
         <button className="bm-btn">Сохранить аккаунт</button>
       </form>
       {msg && <small className="bm-note">{msg}</small>}
@@ -223,7 +271,7 @@ function AndroidWake() {
       <Toggle
         on={st.wake !== false}
         onChange={(v) => nativeCall('wakeEnable', { on: v }, 5000).finally(load)}
-        title="Слушать «Бурмалдец» и «Чекунец»"
+        title="Слушать «Гудвин»"
         sub="Всегда, даже при выключенном экране. Распознаётся прямо на телефоне, звук никуда не уходит."
       />
       <Toggle
@@ -247,7 +295,7 @@ function DesktopWake() {
       {orb !== null && <Toggle on={orb} onChange={(v) => (setOrb(v), void deskCall('prefs', { orb: v }))} title="Шар на рабочем столе" sub="Плавает поверх окон. Нажмите — и говорите, перетащите — куда удобно." />}
       {auto !== null && <Toggle on={auto} onChange={(v) => (setAuto(v), void deskCall('prefs', { autostart: v }))} title="Запускать вместе с Windows" />}
       <p className="bm-hint">
-        Горячая клавиша: <b>Ctrl + Alt + Пробел</b> — позвать Бурмалдеца из любой программы.
+        Горячая клавиша: <b>Ctrl + Alt + Пробел</b> — позвать Гудвина из любой программы.
       </p>
     </>
   )
@@ -292,7 +340,7 @@ function PhoneControl() {
   return (
     <div className="bm-log">
       <b>Управление телефоном: {st?.on ? 'включено ✓' : 'выключено'}</b>
-      <small>Бурмалдец видит экран и нажимает за вас в любых приложениях. Отправку, звонки, покупки и удаление — только после вашего «да». Пароли не вводит.</small>
+      <small>Гудвин видит экран и нажимает за вас в любых приложениях. Отправку, звонки, покупки и удаление — только после вашего «да». Пароли не вводит.</small>
       {!st?.on && (
         <>
           <button className="bm-btn ghost sm" onClick={() => nativeCall('screenSettings', {}, 4000)}>

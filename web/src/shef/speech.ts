@@ -1,4 +1,4 @@
-// Голос Бурмалдеца. Говорит: готовые фразы (заранее озвучены голосом Gemini) → выбранный голос (Gemini / OpenAI / Edge) → голос системы.
+// Голос Гудвина. Говорит: готовые фразы (заранее озвучены голосом Gemini) → выбранный голос (Gemini / OpenAI / Edge) → голос системы.
 // Слушает: на телефоне — нативное распознавание; в браузере — Web Speech API; в приложении для компьютера — desk.ts.
 import { getCfg, keyFor, setCfg, type VoiceEngine } from './ai'
 import { isAndroid, nativeCall, onNative } from './bridge'
@@ -97,7 +97,7 @@ function meter() {
   raf = requestAnimationFrame(tick)
 }
 
-/** Ночной режим: с 23:00 до 7:00 Бурмалдец говорит тише (как Алиса). Выключается в настройках. */
+/** Ночной режим: с 23:00 до 7:00 Гудвин говорит тише (как Алиса). Выключается в настройках. */
 const NIGHT_KEY = 'shef:night'
 export const getNight = () => {
   try {
@@ -183,8 +183,6 @@ const FIX: [RegExp, string][] = [
   [/ч\.\s?л\./g, 'чайная ложка'],
   [/ст\.\s?л\./g, 'столовая ложка'],
   [/ГрандШеф\S*/gi, 'Гранд Шеф'],
-  // своё имя: синтезаторы (особенно Gemini) смазывают конечное «ц» до «с» — «тс» звучит как чёткое «ц» (проверено по спектрограммам)
-  [/(бурмалде|чекуне)ц(?![а-яё])/gi, '$1тс'],
   [/(?<![а-яёa-z0-9])ккал(?![а-яёa-z0-9])\.?/gi, 'килокалорий'],
   [/(?<![а-яёa-z0-9])кбжу(?![а-яёa-z0-9])/gi, 'калории, белки, жиры и углеводы'],
   [/\*(\d)(\d)(\d)(\d)\b/g, 'на конце $1 $2 $3 $4'],
@@ -264,7 +262,7 @@ function chunks(t: string): string[] {
   const out: string[] = []
   let cur = ''
   for (const s of sents) {
-    // первый кусок — одна короткая фраза: её озвучка готова быстрее всего, Бурмалдец начинает говорить почти сразу
+    // первый кусок — одна короткая фраза: её озвучка готова быстрее всего, Гудвин начинает говорить почти сразу
     if (cur && (out.length === 0 || (cur + s).length > 260)) {
       out.push(cur.trim())
       cur = ''
@@ -320,7 +318,7 @@ async function sayInner(t: string, my: number, go: () => void): Promise<void> {
     try {
       for (; i < parts.length; i++) {
         if (my !== stopped) return
-        // ждём звук не дольше нескольких секунд — иначе Бурмалдец заговорит через минуту, невпопад
+        // ждём звук не дольше нескольких секунд — иначе Гудвин заговорит через минуту, невпопад
         const blob = await withTimeout(jobs[i] || geminiAudio(parts[i]), i === 0 ? FIRST_WAIT : 9000)
         if (i + 2 < parts.length) jobs[i + 2] = geminiAudio(parts[i + 2]) // следующий кусок готовится, пока играет этот
         if (my !== stopped) return
@@ -369,7 +367,7 @@ const RecCtor = (window as unknown as { SpeechRecognition?: new () => Rec; webki
   (window as unknown as { webkitSpeechRecognition?: new () => Rec }).webkitSpeechRecognition
 export const canHear = isAndroid || isDesktop || !!RecCtor
 
-/** Громкость микрофона 0..1, пока Бурмалдец слушает (на телефоне — от распознавателя). */
+/** Громкость микрофона 0..1, пока Гудвин слушает (на телефоне — от распознавателя). */
 export const micLevel = { value: 0 }
 if (isAndroid) onNative('stt-level', (d) => (micLevel.value = Number(d) || 0))
 
@@ -400,7 +398,7 @@ export function chime(up = true): Promise<void> {
 export type Heard = { text: string; how: string }
 
 let cancelCurrent: (() => void) | null = null
-/** Прервать слушание (человек начал печатать или нажал на Бурмалдеца). */
+/** Прервать слушание (человек начал печатать или нажал на Гудвина). */
 export function cancelListen() {
   cancelCurrent?.()
 }
@@ -493,12 +491,12 @@ function listenInner(onPartial?: (t: string) => void): Promise<Heard> {
   })()
 }
 
-// ---------- слово «Бурмалдец» на компьютере ----------
-const WAKE = /(^|\s)(бурмалд[а-яё]*|бурмал[а-яё]*|бур малец|бур молодец|бор молодец|чекун[а-яё]*|чекунес|чеку нет|чеку конец)(?=\s|$|[,.!?])/i
+// ---------- слово «Гудвин» на компьютере ----------
+const WAKE = /(^|\s)(гудвин[а-яё]*|гуд вин)(?=\s|$|[,.!?])/i
 let wakeRec: Rec | null = null
 let wakeOn = false
 /**
- * Слушает фоном, пока открыта вкладка. «Бурмалдец» → onWake(''), «Бурмалдец, включи музыку» → onWake('включи музыку').
+ * Слушает фоном, пока открыта вкладка. «Гудвин» → onWake(''), «Гудвин, включи музыку» → onWake('включи музыку').
  * На телефоне это делает служба приложения (даже при выключенном экране) — тут не нужно.
  */
 export function startWake(onWake: (rest: string) => void) {
@@ -524,7 +522,7 @@ export function startWake(onWake: (rest: string) => void) {
         restText = rest
         if (!fired) {
           fired = true
-          // ждём чуть-чуть: вдруг команда сказана сразу за словом «Бурмалдец»
+          // ждём чуть-чуть: вдруг команда сказана сразу за словом «Гудвин»
           timer = window.setTimeout(() => r.stop(), e.results[i].isFinal ? 0 : 900)
         }
         if (e.results[i].isFinal) {

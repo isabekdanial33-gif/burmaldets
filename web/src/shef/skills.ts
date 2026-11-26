@@ -160,7 +160,7 @@ export async function skill(s: string, raw = s): Promise<Reply | null> {
   m = s.match(/^запомни(?:,)?\s+(?:что\s+|пожалуйста\s+)?(.{4,})$/)
   if (m && !/^(?:меня зовут|я живу)/.test(m[1]) && !/^(?:эт[оиуа]|этот|эту|эти|его|её|ее|их)(?:\s|$)|рецепт/.test(m[1])) {
     // берём исходный текст — с заглавными буквами в именах
-    const orig = raw.replace(/^\s*(?:бурмалд\S*|бур молодец|бор молодец|чекун\S*|чеку нет|чеку конец|шеф|chef)[\s,]*/i, '').match(/^запомни[,\s]+(?:что\s+|пожалуйста\s+)?(.{4,}?)[.!]?$/i)?.[1] || m[1]
+    const orig = raw.replace(/^\s*(?:гудвин\S*|гуд вин|шеф|chef)[\s,]*/i, '').match(/^запомни[,\s]+(?:что\s+|пожалуйста\s+)?(.{4,}?)[.!]?$/i)?.[1] || m[1]
     const fact = orig.trim()
     remember(fact)
     return { text: `Запомнил: «${fact}».`, emotion: 'радость' }
@@ -251,7 +251,7 @@ export async function skill(s: string, raw = s): Promise<Reply | null> {
     const r = (await EXEC.send_message({ to: m[1], text: m[3], app })) as Any
     const q = r.ask_user_exactly || r.result?.ask_user_exactly
     if (q) return { text: q, emotion: 'спокойно' }
-    if (r.error === 'pc' || !isAndroid) return { text: 'Сообщения отправляются только из приложения Бурмалдец на телефоне.', emotion: 'грусть' }
+    if (r.error === 'pc' || !isAndroid) return { text: 'Сообщения отправляются только из приложения Гудвин на телефоне.', emotion: 'грусть' }
     if (/не найден/.test(String(r.error))) return { text: `Не нашёл в контактах «${m[1]}». Скажите имя, как оно записано в телефоне.`, emotion: 'грусть' }
     if (r.error || r.note) return { text: String(r.error || r.note).replace(/^./, (c) => c.toUpperCase()), emotion: 'грусть' }
     return null

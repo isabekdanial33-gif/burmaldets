@@ -38,8 +38,8 @@ import java.net.URL
 import java.util.concurrent.Executors
 
 /**
- * Бурмалдец — голосовой ассистент; внутри ещё каталог рецептов для режима повара (работает без интернета).
- * Корзина, холодильник, избранное — общие для сайта и Бурмалдеца на этом телефоне.
+ * Гудвин — голосовой ассистент; внутри ещё каталог рецептов для режима повара (работает без интернета).
+ * Корзина, холодильник, избранное — общие для сайта и Гудвина на этом телефоне.
  */
 class MainActivity : ComponentActivity() {
     companion object {
@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
         fileChooserCb?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
         fileChooserCb = null
     }
-    /** Разовые разрешения по запросу Бурмалдеца (контакты, звонки). */
+    /** Разовые разрешения по запросу Гудвина (контакты, звонки). */
     private var permCb: ((Boolean) -> Unit)? = null
     private val askOne = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         val cb = permCb
@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
         askOne.launch(perm)
     }
 
-    /** Выбор файла по запросу Бурмалдеца (обои из галереи, мелодия из файлов). */
+    /** Выбор файла по запросу Гудвина (обои из галереи, мелодия из файлов). */
     private var pickCb: ((Uri?) -> Unit)? = null
     private val pickAny = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val cb = pickCb
@@ -177,7 +177,7 @@ class MainActivity : ComponentActivity() {
         // режим колонки: сразу голограмма, экран не гаснет
         val speaker = prefs.getBoolean("speaker", false)
         if (speaker) speakerWindow(true)
-        // Бурмалдец — прежде всего ассистент: открываемся сразу на его экране (каталог рецептов — по ✕ или в режиме повара)
+        // Гудвин — прежде всего ассистент: открываемся сразу на его экране (каталог рецептов — по ✕ или в режиме повара)
         web.loadUrl(HOST + "index.html#/shef")
         setup()
     }
@@ -296,8 +296,8 @@ class MainActivity : ComponentActivity() {
     private fun extraSetup() {
         if (!Settings.canDrawOverlays(this) && !prefs.getBoolean("askedOverlay", false)) {
             prefs.edit().putBoolean("askedOverlay", true).apply()
-            dialog("Чтобы Бурмалдец появлялся сам",
-                "Разрешите «Поверх других приложений». Тогда на слово «Бурмалдец» экран включится и Бурмалдец появится даже на заблокированном телефоне.") {
+            dialog("Чтобы Гудвин появлялся сам",
+                "Разрешите «Поверх других приложений». Тогда на слово «Гудвин» экран включится и Гудвин появится даже на заблокированном телефоне.") {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             }
             return
@@ -305,8 +305,8 @@ class MainActivity : ComponentActivity() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (!pm.isIgnoringBatteryOptimizations(packageName) && !prefs.getBoolean("askedBattery", false)) {
             prefs.edit().putBoolean("askedBattery", true).apply()
-            dialog("Чтобы Бурмалдец не засыпал",
-                "Разрешите работу без ограничений батареи — иначе телефон может выключить Бурмалдеца ночью. Расход — несколько процентов в сутки.") {
+            dialog("Чтобы Гудвин не засыпал",
+                "Разрешите работу без ограничений батареи — иначе телефон может выключить Гудвина ночью. Расход — несколько процентов в сутки.") {
                 @SuppressLint("BatteryLife")
                 val i = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
                 startActivity(i)
@@ -317,7 +317,7 @@ class MainActivity : ComponentActivity() {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             if (!nm.canUseFullScreenIntent() && !prefs.getBoolean("askedFsi", false)) {
                 prefs.edit().putBoolean("askedFsi", true).apply()
-                dialog("Запасной способ проснуться", "Разрешите полноэкранные уведомления — пригодится, если система не даст открыть Бурмалдеца поверх блокировки.") {
+                dialog("Запасной способ проснуться", "Разрешите полноэкранные уведомления — пригодится, если система не даст открыть Гудвина поверх блокировки.") {
                     startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
                 }
             }
@@ -374,7 +374,7 @@ class MainActivity : ComponentActivity() {
         null
     }
 
-    // ---------- мост для Бурмалдеца ----------
+    // ---------- мост для Гудвина ----------
     inner class Bridge {
         @JavascriptInterface
         fun platform() = "android"
@@ -487,7 +487,7 @@ class MainActivity : ComponentActivity() {
                 if (acc == null) done(JSONObject().put("ok", false).put("error", "screen_control_off"))
                 else done(
                     when (method) {
-                        "screenRead" -> acc.read().also { r -> if (r.optString("package") == packageName) r.put("note", "На экране сам Бурмалдец. Сначала открой нужное приложение (open_app) или phone_action home.") }
+                        "screenRead" -> acc.read().also { r -> if (r.optString("package") == packageName) r.put("note", "На экране сам Гудвин. Сначала открой нужное приложение (open_app) или phone_action home.") }
                         "screenTap" -> acc.tap(a.optInt("i", -1))
                         "screenLongTap" -> acc.longTap(a.optInt("i", -1))
                         "screenType" -> acc.type(a.optInt("i", -1), a.optString("text"), a.optBoolean("append", false))
@@ -576,7 +576,7 @@ class MainActivity : ComponentActivity() {
                     done(r)
                 }
                 if (a.optString("source") == "file") {
-                    if (!Settings.System.canWrite(this)) after(JSONObject().put("ok", false).put("error", "need_write_settings").put("tell_user", "Нужно разрешить Бурмалдецу «Изменение системных настроек» — открываю этот экран, включите и повторите."))
+                    if (!Settings.System.canWrite(this)) after(JSONObject().put("ok", false).put("error", "need_write_settings").put("tell_user", "Нужно разрешить Гудвину «Изменение системных настроек» — открываю этот экран, включите и повторите."))
                     else {
                         pickCb = { uri -> if (uri == null) done(JSONObject().put("ok", false).put("error", "файл не выбрали")) else io.execute { after(device.setRingtoneFile(uri, type)) } }
                         pickAny.launch("audio/*")
@@ -671,8 +671,8 @@ class MainActivity : ComponentActivity() {
             }
             "call" -> withPerm(Manifest.permission.CALL_PHONE) { ok -> done(device.call(a.optString("number"), ok)) }
             "openApp" -> done(device.openApp(a.optString("name")))
-            "setTimer" -> done(device.setTimer(a.optInt("seconds"), a.optString("label", "Бурмалдец")))
-            "setAlarm" -> done(device.setAlarm(a.optInt("hour", -1), a.optInt("minute", 0), a.optString("label", "Бурмалдец")))
+            "setTimer" -> done(device.setTimer(a.optInt("seconds"), a.optString("label", "Гудвин")))
+            "setAlarm" -> done(device.setAlarm(a.optInt("hour", -1), a.optInt("minute", 0), a.optString("label", "Гудвин")))
             "torch" -> done(device.torch(a.optBoolean("on", true)))
             "volume" -> done(device.volume(a.optDouble("percent", Double.NaN), a.optString("direction")))
             "media" -> done(device.media(a.optString("action")))

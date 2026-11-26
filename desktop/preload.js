@@ -1,4 +1,4 @@
-// Мост между веб-ядром Бурмалдеца и Windows. Веб видит только window.bmDesk — без доступа к Node.
+// Мост между веб-ядром Гудвина и Windows. Веб видит только window.bmDesk — без доступа к Node.
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('bmDesk', {

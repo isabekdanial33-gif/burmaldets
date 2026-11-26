@@ -1,5 +1,7 @@
-// Экран Бурмалдеца. Три вида: весь экран (приложение), «шторка» поверх других приложений (телефон, плавающая кнопка
+// Экран Гудвина. Три вида: весь экран (приложение), «шторка» поверх других приложений (телефон, плавающая кнопка
 // или слово-активатор) и панель рядом с шаром на рабочем столе (компьютер).
+import ChatsPanel from './ChatsPanel'
+import { activeChat, onChats } from './chats'
 import { afterWake, wakeEnd } from './wake'
 import { syncWakeExtra } from './WakeTrain'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -19,7 +21,7 @@ import { shefLog } from './log'
 import { cancelListen, canHear, chime, listen, say, startWake, stopSpeaking, stopWake, unlockAudio } from './speech'
 import { deskCall, ui } from './tools'
 import { getMode, onMode, setMode, type Mode } from './mode'
-import { ICam, IClose, IGear, IHelp, IKey, IMic, ISend } from './Icons'
+import { ICam, IChats, IClose, IGear, IHelp, IKey, IMic, ISend } from './Icons'
 
 const TIPS: Record<Mode, string[]> = {
   general: ['Какая погода завтра?', 'Курс доллара', 'Главные новости', 'Напомни через час позвонить маме', 'Что у меня сегодня?', 'Разбуди меня в 7', 'Включи что-нибудь спокойное', 'Потратил 2000 на такси', 'Доброе утро', 'Где я?', 'Расскажи анекдот', 'Сколько будет 15% от 8400?'],
@@ -32,7 +34,7 @@ const photoPrompt = () =>
     ? 'Что на этом фото? Если это блюдо — скажи, что это, и найди похожий рецепт в каталоге. Если продукты — предложи, что из них приготовить.'
     : 'Что на этом фото? Коротко опиши главное. Если там текст — прочитай или переведи его.'
 
-const ONLY_NAME = /^(?:эй|ну|алло|слышь)?[\s,]*(?:бур\s*м[оа]л\S*|бурм[оа]лд\S*|бур молодец|чекун\S*|чеку нет)[\s.!?,]*$/i
+const ONLY_NAME = /^(?:эй|ну|алло|слышь)?[\s,]*(?:гудвин\S*|гуд вин)[\s.!?,]*$/i
 /** Имя голосом хозяина (из обучения, например «отец») без команды. */
 const onlyName = (q: string) => {
   const e = wakeEnd(q)
@@ -99,6 +101,10 @@ function Assistant() {
   // на компьютере слушаем имя по умолчанию (в приложении), в браузере — по галочке
   const [wakeOn, setWakeOn] = useState(() => !isAndroid && canHear && (localStorage.getItem(WAKE_KEY) ?? (isDesktop ? '1' : '0')) === '1')
   const busy = useRef(false)
+  // чаты и проекты: панель и название текущего чата (в подсказке кнопки)
+  const [chats, setChats] = useState(false)
+  const [chatTitle, setChatTitle] = useState(() => activeChat().title)
+  useEffect(() => onChats(() => setChatTitle(activeChat().title)), [])
   /** Нажали «Стоп»: разговор обрывается, ничего не говорим и не слушаем дальше. */
   const halt = useRef(false)
   /** Что сейчас делает на компьютере («Нажимаю «Сохранить»») — видно под шаром. */
@@ -172,7 +178,7 @@ function Assistant() {
               queued.current = null
               if (q === undefined && !image) continue
             } else q = h.text
-            // сказали только имя («Бурмалдец!») — значит, ждут, что слушаю: слушаем дальше, без ответа
+            // сказали только имя («Гудвин!») — значит, ждут, что слушаю: слушаем дальше, без ответа
             if (q && (ONLY_NAME.test(q.trim()) || onlyName(q)) && turn < 28) {
               q = undefined
               continue
@@ -397,7 +403,7 @@ function Assistant() {
   }
 
   const status =
-    phase === 'listen' ? 'Слушаю…' : phase === 'think' ? act || 'Думаю…' : phase === 'speak' ? '' : isAndroid || wakeOn ? 'Скажите «Бурмалдец» или «Чекунец»' : 'Нажмите на шар и говорите'
+    phase === 'listen' ? 'Слушаю…' : phase === 'think' ? act || 'Думаю…' : phase === 'speak' ? '' : isAndroid || wakeOn ? 'Скажите «Гудвин»' : 'Нажмите на шар и говорите'
 
   const setPyr = (on: boolean) => {
     setPyramid(on)
@@ -441,7 +447,7 @@ function Assistant() {
         <header className="bm-top">
           <div className="bm-brand">
             <span className={'bm-pulse ph-' + phase} />
-            <span className="bm-word">БУРМАЛДЕЦ</span>
+            <span className="bm-word">ГУДВИН</span>
             <span className="bm-state">{STATUS[phase]}</span>
             {mode === 'cook' && (
               <button className="bm-chip" onClick={() => setMode('general')} title="Выйти из режима повара" aria-label="Режим повара включён. Нажмите, чтобы выйти">
@@ -450,7 +456,10 @@ function Assistant() {
             )}
           </div>
           <div className="bm-top-r">
-            <button className="bm-iconbtn" onClick={() => setHelp(true)} aria-label="Что умеет Бурмалдец">
+            <button className="bm-iconbtn" onClick={() => setChats(true)} aria-label="Чаты и проекты" title={chatTitle}>
+              <IChats size={20} />
+            </button>
+            <button className="bm-iconbtn" onClick={() => setHelp(true)} aria-label="Что умеет Гудвин">
               <IHelp size={20} />
             </button>
             <button className="bm-iconbtn" onClick={() => setSettings(true)} aria-label="Настройки">
@@ -464,7 +473,7 @@ function Assistant() {
           </div>
         </header>
 
-        <button className="bm-stage" onClick={tapOrb} aria-label="Бурмалдец — нажмите, чтобы поговорить">
+        <button className="bm-stage" onClick={tapOrb} aria-label="Гудвин — нажмите, чтобы поговорить">
           <span className="bm-halo" aria-hidden />
           <Holo phase={phase} emotion={emotion} poke={poke} bare={compact} />
         </button>
@@ -506,7 +515,7 @@ function Assistant() {
                   <i aria-hidden />
                 </button>
               )}
-              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Напишите Бурмалдецу…" aria-label="Сообщение" autoFocus={!isAndroid} />
+              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Напишите Гудвину…" aria-label="Сообщение" autoFocus={!isAndroid} />
               <button className="bm-send" aria-label="Отправить">
                 <ISend size={18} />
               </button>
@@ -528,6 +537,7 @@ function Assistant() {
       <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => (onFile(e.target.files?.[0]), (e.target.value = ''))} />
 
       {settingsEl}
+      {chats && <ChatsPanel onClose={() => setChats(false)} />}
       {help && <Help mode={mode} onClose={() => setHelp(false)} onPick={(t) => (setHelp(false), unlockAudio(), converse(t))} />}
     </div>
   )

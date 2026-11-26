@@ -1,7 +1,7 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- светящийся шар Бурмалдеца: неоновое кольцо, внутреннее свечение, глаза и улыбка -->
+    <!-- светящийся шар Гудвина: неоновое кольцо, внутреннее свечение, глаза и улыбка -->
     <path android:pathData="M54,28a26,26 0,1 1,0 52a26,26 0,1 1,0 -52Z">
         <aapt:attr name="android:fillColor">
             <gradient android:type="radial" android:centerX="50" android:centerY="46" android:gradientRadius="30"

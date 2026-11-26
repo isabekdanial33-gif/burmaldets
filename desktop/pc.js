@@ -1,4 +1,4 @@
-// Что Бурмалдец умеет делать на компьютере: сайты и программы, музыка и громкость, таймеры и будильники,
+// Что Гудвин умеет делать на компьютере: сайты и программы, музыка и громкость, таймеры и будильники,
 // буфер обмена, снимок экрана, голос Edge. Опасного (удалить, выключить, оплатить) тут нет.
 const { app, shell, clipboard, desktopCapturer, Notification, powerMonitor } = require('electron')
 const { execFile } = require('node:child_process')
@@ -122,7 +122,7 @@ async function openApp(name) {
   return { ok: false, error: 'not_found', note: `На компьютере не нашёл программу «${name}». Могу открыть сайт или поискать в интернете.` }
 }
 
-// ---------- таймеры и будильники (пока Бурмалдец запущен) ----------
+// ---------- таймеры и будильники (пока Гудвин запущен) ----------
 const ALARMS = () => path.join(app.getPath('userData'), 'alarms.json')
 let alarms = []
 let hooks = null
@@ -140,7 +140,7 @@ function arm(a) {
     alarms = alarms.filter((x) => x !== a)
     saveAlarms()
     hooks?.notify(a.kind === 'timer' ? 'Таймер' : 'Будильник', a.label)
-    hooks?.say(a.kind === 'timer' ? `Время вышло! ${a.label === 'Бурмалдец' ? '' : a.label}`.trim() : `Будильник: ${a.label}. Пора!`)
+    hooks?.say(a.kind === 'timer' ? `Время вышло! ${a.label === 'Гудвин' ? '' : a.label}`.trim() : `Будильник: ${a.label}. Пора!`)
   }, Math.max(0, Math.min(ms, 2147000000)))
 }
 function restoreAlarms(h) {
@@ -153,7 +153,7 @@ function restoreAlarms(h) {
   alarms.forEach(arm)
 }
 function addAlarm(kind, at, label) {
-  const a = { kind, at, label: label || 'Бурмалдец' }
+  const a = { kind, at, label: label || 'Гудвин' }
   alarms.push(a)
   saveAlarms()
   arm(a)
@@ -162,7 +162,7 @@ function addAlarm(kind, at, label) {
 
 function notify(title, body, onClick) {
   try {
-    const n = new Notification({ title: 'Бурмалдец · ' + title, body: body || '', silent: false })
+    const n = new Notification({ title: 'Гудвин · ' + title, body: body || '', silent: false })
     if (onClick) n.on('click', onClick)
     n.show()
   } catch {
@@ -221,7 +221,7 @@ async function call(method, a, h) {
       d.setHours(h, m, 0, 0)
       if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1)
       addAlarm('alarm', d.getTime(), a.label)
-      return { ok: true, at: d.toLocaleString('ru-RU'), note: 'Будильник сработает, если Бурмалдец запущен (он стартует вместе с Windows).' }
+      return { ok: true, at: d.toLocaleString('ru-RU'), note: 'Будильник сработает, если Гудвин запущен (он стартует вместе с Windows).' }
     }
     case 'status':
       return { ok: true, device: 'компьютер', on_battery: powerMonitor.isOnBatteryPower(), time: new Date().toLocaleString('ru-RU'), uptime_hours: Math.round(os.uptime() / 360) / 10, memory_free_gb: Math.round(os.freemem() / 1e8) / 10 }
@@ -241,7 +241,7 @@ async function call(method, a, h) {
       await shell.openExternal('ms-settings:')
       return { ok: true }
     default:
-      return { ok: false, note: 'Это умеет только Бурмалдец на телефоне. На компьютере могу открыть сайт или программу, управлять музыкой и громкостью, поставить таймер, посмотреть на экран.' }
+      return { ok: false, note: 'Это умеет только Гудвин на телефоне. На компьютере могу открыть сайт или программу, управлять музыкой и громкостью, поставить таймер, посмотреть на экран.' }
   }
 }
 

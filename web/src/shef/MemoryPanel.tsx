@@ -1,4 +1,4 @@
-// «Что Бурмалдец обо мне знает»: запомненные факты, заметки и траты — посмотреть и удалить. Всё хранится только на этом устройстве.
+// «Что Гудвин обо мне знает»: запомненные факты, заметки и траты — посмотреть и удалить. Всё хранится только на этом устройстве.
 import { useState } from 'react'
 import { forgetLine, memoryFacts } from './memory'
 import { allNotes, deleteNoteAt } from './notes'
@@ -14,7 +14,7 @@ export default function MemoryPanel() {
   const all = report('all')
   return (
     <div className="shef-mem">
-      <b>Что Бурмалдец обо мне помнит</b>
+      <b>Что Гудвин обо мне помнит</b>
       <small>Хранится только на этом телефоне. Скажите «запомни…» или «забудь…», либо удалите здесь.</small>
       {facts.length ? (
         <ul>

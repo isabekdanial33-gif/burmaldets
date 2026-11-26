@@ -23,9 +23,9 @@ import org.vosk.android.SpeechService
 import java.io.File
 
 /**
- * Слушает слово «Бурмалдец» постоянно — и при выключенном экране, и на блокировке.
+ * Слушает слово «Гудвин» постоянно — и при выключенном экране, и на блокировке.
  * Распознавание идёт прямо на телефоне (Vosk), звук никуда не отправляется.
- * Пока Бурмалдец разговаривает, микрофон отдаётся распознаванию команд, потом служба снова слушает.
+ * Пока Гудвин разговаривает, микрофон отдаётся распознаванию команд, потом служба снова слушает.
  */
 class WakeService : Service(), RecognitionListener {
 
@@ -36,12 +36,12 @@ class WakeService : Service(), RecognitionListener {
         const val WAKE_NOTE_ID = 8
         private const val TAG = "ShefWake"
         /**
-         * «Бурмалдец» и «Чекунец» — придуманные слова, в словаре Vosk их нет. Проверено на записях:
-         * Vosk слышит их как «бур молодец» и «чеку нет». Обычная речь («молодец», «чек у нас», «конец») не будит.
+         * «Гудвин» есть в словаре Vosk и слышится чётко (замер: 12 из 12, уверенность 0.99, ложных на обычной речи — 0).
+         * Будит только законченная фраза с уверенностью от 0.6 (см. onResult).
          */
-        val WAKE = Regex("""(?:^|\s)(?:(?:бур|бор|бура|бурма|бурмал|бурный|бурно)\s+(?:молодец|малец|мальца|молодца|молодцы|отец|дец)|(?:чеку|чику|чека|чекан)\s+(?:нет|нец|конец|нету|отец)|чек\s+отец|бурмалд\S*|чекун\S*)(?=\s|$)""")
+        val WAKE = Regex("""(?:^|\s)гудвин\S*(?=\s|$)""")
 
-        /** Как Vosk слышит имя голосом хозяина (из обучения в приложении): «отец», «бурма отец»... */
+        /** Как Vosk слышит имя голосом хозяина (из обучения в приложении), если стандартное «гудвин» у него не ловится */
         @Volatile var extra: List<String> = emptyList()
         private val NON_LETTER = Regex("""[^\p{L}\p{N}\s]""")
         private val SPACES = Regex("""\s+""")
@@ -64,7 +64,16 @@ class WakeService : Service(), RecognitionListener {
         fun heardName(text: String, final: Boolean, words: org.json.JSONArray? = null): Boolean {
             val t = norm(text)
             if (t.isEmpty()) return false
-            if (WAKE.containsMatchIn(t)) return true
+            if (WAKE.containsMatchIn(t)) {
+                // строго: только законченная фраза и чёткое слово (уверенность распознавателя от 0.6)
+                if (!final) return false
+                if (words == null) return true
+                for (i in 0 until words.length()) {
+                    val w = words.optJSONObject(i) ?: continue
+                    if (norm(w.optString("word")).startsWith("гудвин")) return w.optDouble("conf", 1.0) >= 0.6
+                }
+                return true
+            }
             for (p in extra) {
                 if (!p.contains(' ')) {
                     if (final && t == p) return true
@@ -203,8 +212,8 @@ class WakeService : Service(), RecognitionListener {
 
     private fun note(): Notification = Notification.Builder(this, CH_LISTEN)
         .setSmallIcon(R.drawable.ic_shef)
-        .setContentTitle(if (listenOn(this)) "Бурмалдец слушает" else "Бурмалдец рядом")
-        .setContentText(if (listenOn(this)) "Скажите «Бурмалдец» или «Чекунец» — даже при выключенном экране" else "Плавающая кнопка и сценарии работают в фоне")
+        .setContentTitle(if (listenOn(this)) "Гудвин слушает" else "Гудвин рядом")
+        .setContentText(if (listenOn(this)) "Скажите «Гудвин» — даже при выключенном экране" else "Плавающая кнопка и сценарии работают в фоне")
         .setOngoing(true)
         .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
         .build()
@@ -234,8 +243,8 @@ class WakeService : Service(), RecognitionListener {
             Log.w(TAG, "startForeground", e)
             val pi = PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(9, Notification.Builder(this, CH_WAKE)
-                .setSmallIcon(R.drawable.ic_shef).setContentTitle("Бурмалдец ждёт")
-                .setContentText("Нажмите один раз — и Бурмалдец снова будет слушать").setContentIntent(pi).setAutoCancel(true).build())
+                .setSmallIcon(R.drawable.ic_shef).setContentTitle("Гудвин ждёт")
+                .setContentText("Нажмите один раз — и Гудвин снова будет слушать").setContentIntent(pi).setAutoCancel(true).build())
             instance = null
             stopSelf()
             return
@@ -298,7 +307,7 @@ class WakeService : Service(), RecognitionListener {
         }
     }
 
-    /** Отдать микрофон (Бурмалдец разговаривает). */
+    /** Отдать микрофон (Гудвин разговаривает). */
     fun pause() {
         paused = true
         once = null
@@ -382,7 +391,7 @@ class WakeService : Service(), RecognitionListener {
         if (once != null) finishOnce(oncePartial)
     }
 
-    /** Услышал «Бурмалдец»: включаем экран и показываем Бурмалдеца поверх всего, даже поверх блокировки. */
+    /** Услышал «Гудвин»: включаем экран и показываем Гудвина поверх всего, даже поверх блокировки. */
     fun wake(fromBubble: Boolean = false) {
         val now = System.currentTimeMillis()
         if (now - lastWake < (if (fromBubble) 700 else 2500)) return
@@ -416,7 +425,7 @@ class WakeService : Service(), RecognitionListener {
             val pi = PendingIntent.getActivity(this, 1, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             val n = Notification.Builder(this, CH_WAKE)
                 .setSmallIcon(R.drawable.ic_shef)
-                .setContentTitle("Бурмалдец проснулся")
+                .setContentTitle("Гудвин проснулся")
                 .setContentText("Нажмите, чтобы говорить")
                 .setCategory(Notification.CATEGORY_CALL)
                 .setFullScreenIntent(pi, true)
@@ -433,11 +442,11 @@ class WakeService : Service(), RecognitionListener {
 fun channels(ctx: Context) {
     val nm = ctx.getSystemService(NotificationManager::class.java)
     // «тихое» уведомление: без звука и значка в строке состояния (полностью убрать его Android не разрешает)
-    nm.createNotificationChannel(NotificationChannel(WakeService.CH_LISTEN, "Бурмалдец слушает", NotificationManager.IMPORTANCE_MIN).apply {
+    nm.createNotificationChannel(NotificationChannel(WakeService.CH_LISTEN, "Гудвин слушает", NotificationManager.IMPORTANCE_MIN).apply {
         setShowBadge(false)
-        description = "Постоянное уведомление, пока Бурмалдец ждёт своё имя"
+        description = "Постоянное уведомление, пока Гудвин ждёт своё имя"
     })
-    nm.createNotificationChannel(NotificationChannel(WakeService.CH_WAKE, "Бурмалдец проснулся", NotificationManager.IMPORTANCE_HIGH).apply {
+    nm.createNotificationChannel(NotificationChannel(WakeService.CH_WAKE, "Гудвин проснулся", NotificationManager.IMPORTANCE_HIGH).apply {
         setSound(null, null)
     })
 }

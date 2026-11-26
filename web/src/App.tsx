@@ -81,7 +81,7 @@ const NAV: [string, string, string][] = [
 
 const TITLES: Record<string, string> = {
   '/catalog': 'Каталог',
-  '/shef': 'Бурмалдец — голосовой помощник',
+  '/shef': 'Гудвин — голосовой помощник',
   '/fridge': 'Холодильник',
   '/list': 'Список покупок',
   '/my': 'Мой дневник',
@@ -116,7 +116,7 @@ export default function App() {
     if (!path.startsWith('/r/')) window.scrollTo(0, 0)
     const item = path.startsWith('/r/') ? data?.byId.get(path.slice(3)) : null
     const t = item ? item.t : TITLES[path]
-    document.title = path === '/shef' || path === '/' || path === '' ? 'Бурмалдец' : t ? `${t} — Бурмалдец` : 'Рецепты — Бурмалдец'
+    document.title = path === '/shef' || path === '/' || path === '' ? 'Гудвин' : t ? `${t} — Гудвин` : 'Рецепты — Гудвин'
   }, [path, data])
 
   let page: React.ReactNode = (
@@ -153,7 +153,7 @@ export default function App() {
     else if (path === '/about') page = <About meta={data.meta} items={data.items} />
     else page = <Home items={data.items} meta={data.meta} />
   }
-  // Бурмалдец: главный экран — ассистент; каталог рецептов открывается из режима повара
+  // Гудвин: главный экран — ассистент; каталог рецептов открывается из режима повара
   if (path === '/shef' || path === '/' || path === '')
     return (
       <Suspense fallback={<div className="shef-boot" />}>
@@ -239,10 +239,10 @@ export default function App() {
           </a>
         ))}
       </nav>
-      <a className="shef-fab" href="#/shef" aria-label="Позвать Бурмалдеца — голосового помощника">
+      <a className="shef-fab" href="#/shef" aria-label="Позвать Гудвина — голосового помощника">
         <i />
         <i />
-        <b>Бурмалдец</b>
+        <b>Гудвин</b>
       </a>
       <TimersDock />
       <Toast />

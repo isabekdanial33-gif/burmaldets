@@ -1,9 +1,11 @@
-// Дирижёр Бурмалдеца: быстрые команды — локально, остальное — выбранный ИИ с инструментами, без сети — локальный мозг.
+// Дирижёр Гудвина: быстрые команды — локально, остальное — выбранный ИИ с инструментами, без сети — локальный мозг.
 import { getState } from '../store'
 import { platform } from './bridge'
-import { getCfg } from './ai'
+import { agentBrain, findAgent, getCfg, type Brain } from './ai'
 import { isDesktop } from './net'
 import { pcActiveAt } from './pctools'
+import { activeChat, freshIfStale, getProject, logTurn, onChats, saveChatHistory } from './chats'
+import { subDecl } from './subagents'
 import { fallback, quick as quickRaw, rememberFound, rememberSaid, type Emotion, type Reply } from './brain'
 import { chat, LlmError, type Content, type Part } from './llm'
 import { shefLog } from './log'
@@ -16,26 +18,25 @@ import { getMode, modeCommand, setMode, type Mode } from './mode'
 import { memoryFacts } from './memory'
 
 const history: Content[] = []
-// разговор переживает перезапуск экрана (Android иногда пересоздаёт приложение): последние 15 минут
-const HIST_KEY = 'shef:history'
-try {
-  const saved = JSON.parse(localStorage.getItem(HIST_KEY) || 'null') as { at: number; h: Content[] } | null
-  if (saved && Date.now() - saved.at < 15 * 60000 && Array.isArray(saved.h)) history.push(...saved.h)
-} catch {
-  /* нет — начинаем с чистого листа */
+// история живёт в чатах (chats.ts): у каждого чата своя
+let loadedId = ''
+/** Подхватить историю активного чата (после переключения чата). */
+export function syncChat() {
+  const c = activeChat()
+  if (c.id === loadedId) return
+  loadedId = c.id
+  history.splice(0, history.length, ...c.history)
 }
+syncChat()
+onChats(syncChat)
 function saveHistory() {
-  try {
-    // фото не храним (слишком большие) — только текст; начинаем с обычной реплики пользователя
-    const h = history
-      .slice(-16)
-      .map((c) => ({ ...c, parts: c.parts.filter((p) => !p.inlineData) }))
-      .filter((c) => c.parts.length)
-    while (h.length && !(h[0].role === 'user' && h[0].parts.some((p) => p.text) && !h[0].parts.some((p) => p.functionResponse))) h.shift()
-    localStorage.setItem(HIST_KEY, JSON.stringify({ at: Date.now(), h }))
-  } catch {
-    /* переполнено — не страшно */
-  }
+  // фото не храним (слишком большие) — только текст; начинаем с обычной реплики пользователя
+  const h = history
+    .slice(-16)
+    .map((c) => ({ ...c, parts: c.parts.filter((p) => !p.inlineData) }))
+    .filter((c) => c.parts.length)
+  while (h.length && !(h[0].role === 'user' && h[0].parts.some((p) => p.text) && !h[0].parts.some((p) => p.functionResponse))) h.shift()
+  saveChatHistory(h)
 }
 const EMO: Emotion[] = ['спокойно', 'радость', 'думаю', 'удивление', 'грусть', 'слушаю', 'гордость']
 
@@ -63,7 +64,7 @@ const toolsFor = (m: Mode, text = '') =>
     if (isDesktop && PHONE_ONLY.has(d.name)) return false
     if (PC_TOOLS.has(d.name)) return isDesktop && (!eco() || PC_HINT.test(text) || Date.now() - pcActiveAt < 10 * 60000)
     return true
-  })
+  }).concat(subDecl() ? [subDecl()!] : [])
 
 function system(): string {
   const st = getState()
@@ -72,7 +73,7 @@ function system(): string {
   const now = new Date()
   const facts = memoryFacts()
   const base = [
-    'Ты — Бурмалдец (второе имя — Чекунец), личный голосовой ассистент пользователя, как Алиса или Джарвис, только умнее и полезнее. Откликаешься на оба имени; «Бурмалдец» и «Чекунец» — просто твои имена, шутливые, но ты ими гордишься. Если спросят, кто тебя сделал или какая ты модель — ты Бурмалдец, работаешь на ИИ, который выбрал пользователь.',
+    'Ты — Гудвин, личный голосовой ассистент пользователя, как Алиса или Джарвис, только умнее и полезнее. Тебя зовут Гудвин — как доброго волшебника, который исполняет желания; ты этим именем гордишься. Если спросят, кто тебя сделал или какая ты модель — ты Гудвин, работаешь на ИИ, который выбрал пользователь.',
     mode === 'cook'
       ? 'Сейчас включён РЕЖИМ ПОВАРА: ты ещё и опытный шеф-повар для мультипечи-аэрогриля ГрандШеф (приложение MyGrandChef).'
       : 'Сейчас ОБЫЧНЫЙ РЕЖИМ: ты обычный ассистент, НЕ повар. Сам не заводи разговор о кухне, рецептах и еде, не предлагай что-то приготовить и не шути про кухню. Но если пользователь САМ спрашивает про еду или рецепт — ответь нормально и по делу своими знаниями (идеи блюд, короткий рецепт), не отказывай и не рассказывай про режимы; только если он хочет готовить по шагам — один раз подскажи фразу «режим повара».',
@@ -116,7 +117,7 @@ function system(): string {
     'Выйти из режима повара пользователь может словами «выйди из режима повара».',
   ]
   const ctx = [
-    `Сейчас: ${now.toLocaleString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} (часовой пояс ${Intl.DateTimeFormat().resolvedOptions().timeZone}). Устройство: ${platform === 'android' ? 'телефон Android (приложение Бурмалдец)' : isDesktop ? 'компьютер Windows (приложение Бурмалдец: умеет открывать сайты и программы, управлять музыкой и громкостью, ставить таймеры, смотреть на экран)' : platform === 'pc' ? 'компьютер (браузер)' : 'телефон (браузер)'}.`,
+    `Сейчас: ${now.toLocaleString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} (часовой пояс ${Intl.DateTimeFormat().resolvedOptions().timeZone}). Устройство: ${platform === 'android' ? 'телефон Android (приложение Гудвин)' : isDesktop ? 'компьютер Windows (приложение Гудвин: умеет открывать сайты и программы, управлять музыкой и громкостью, ставить таймеры, смотреть на экран)' : platform === 'pc' ? 'компьютер (браузер)' : 'телефон (браузер)'}.`,
     ...(getCfg().persona.trim() ? ['Пожелания пользователя к твоему характеру и ответам (соблюдай): ' + getCfg().persona.trim().slice(0, 600)] : []),
     `В списке покупок: ${st.shop.filter((x) => !x.done).length} поз.`,
     facts.length ? 'Что ты знаешь о пользователе:\n' + facts.map((f) => '- ' + f).join('\n') : 'О пользователе пока ничего не запомнено.',
@@ -128,6 +129,16 @@ function system(): string {
     'ЭКРАН: «что у меня на экране», «прочитай это», «о чём статья» — pc_look (с image: true, если важна картинка) и коротко перескажи суть.',
   ]
   const all = isDesktop ? [...base.filter((l) => !PHONE_LINES.test(l)), ...pc] : base
+  const chatNow = activeChat()
+  const proj = getProject(chatNow.projectId)
+  const ag = chatAgent()
+  const extra = [
+    ...(ag ? [`В этом чате ты работаешь как агент «${ag.name}». Его характер и правила (соблюдай): ${ag.instructions.slice(0, 1500) || 'обычные'}`] : []),
+    ...(proj ? [`Это чат проекта «${proj.name}».${proj.instructions ? ' Инструкции проекта (соблюдай): ' + proj.instructions.slice(0, 2000) : ''}`] : []),
+    ...(subDecl() ? ['СУБ-АГЕНТЫ: у тебя есть помощники со своим ИИ (ask_agent). Если пользователь называет агента («спроси у …», «пусть … сделает», «поручи …») — ОБЯЗАТЕЛЬНО вызови ask_agent, даже если знаешь ответ сам: человек хочет услышать именно этого агента. Задачи по профилю агента тоже поручай ему. Ответ агента перескажи коротко и скажи, что это ответ агента.'] : []),
+    ...(isDesktop ? ['АККАУНТЫ: если открыта страница входа сайта, для которого есть сохранённый аккаунт (pc_accounts), — входи через pc_login.'] : []),
+  ]
+  all.push(...extra)
   return [...all, ...(mode === 'cook' ? cook : []), ...ctx].join('\n')
 }
 
@@ -157,6 +168,7 @@ const CFG_HINT: Record<string, string> = {
   key: 'Ключ ИИ не подошёл. Проверьте его в настройках, в разделе «Мозг».',
   money: 'У провайдера ИИ закончился баланс. Пополните его или выберите другой ИИ в настройках.',
   model: 'Выбранная модель ИИ не отвечает — похоже, её нет у провайдера. Выберите другую в настройках.',
+  quota: 'Дневной эко-лимит ИИ исчерпан. Простые команды работают и так; лимит можно поднять в настройках, в разделе «Мозг».',
 }
 
 const CLAIM = /(записал|запомнил|поставил|добавил|отправил|сохранил|удалил|отменил|создал|установил|включаю|выключил|отметил)(?![а-яё])/i
@@ -169,9 +181,8 @@ function parseReply(t: string): Reply {
     .replace(/\*\*?|__|#+\s|`/g, '')
     .replace(/\[[а-яё ]{2,20}\]\s*/gi, '')
     .replace(/ {2,}/g, ' ')
-    // модель иногда рвёт непривычное имя пробелом: «Бурмалде ц»
-    .replace(/Бурмалде\s+ц/g, 'Бурмалдец')
-    .replace(/Чекуне\s+ц/g, 'Чекунец')
+    // модель иногда рвёт имя пробелом: «Гуд вин»
+    .replace(/Гуд\s+вин/g, 'Гудвин')
     .trim()
   return { text, emotion: emo }
 }
@@ -194,16 +205,29 @@ export function stopAsk() {
 }
 
 export async function ask(text: string, opts: AskOpts = {}): Promise<Reply> {
+  if (freshIfStale()) syncChat()
   const r = await askInner(text, opts)
   if (r.text) rememberSaid(r.text)
   saveHistory()
+  if (!r.stopped) logTurn(text || (opts.image ? '📷 фото' : ''), r.text)
   return r
+}
+
+/** Чей «мозг» у текущего чата: агент чата, иначе агент проекта, иначе основной из настроек. */
+function chatAgent() {
+  const c = activeChat()
+  const id = c.agentId || getProject(c.projectId)?.agentId
+  return id ? findAgent(id) : undefined
+}
+function chatBrain(): Brain | undefined {
+  const a = chatAgent()
+  return a ? agentBrain(a) : undefined
 }
 
 const quick = quickRaw
 
 async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
-  // ждём «да/нет» на звонок — это решает код, а не модель: без «да» Бурмалдец никогда не звонит
+  // ждём «да/нет» на звонок — это решает код, а не модель: без «да» Гудвин никогда не звонит
   if (!opts.image) {
     // смена режима — решает код, мгновенно
     const mc = modeCommand(text)
@@ -226,8 +250,8 @@ async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
   }
   // «включи <песня>» — всегда через Gemini: он восстановит настоящее название из распознанной речи
   const isMusic =
-    (/музык|песн|трек|плейлист|альбом/i.test(text) && !/^((?:бурмалд\S*|бур молодец|бор молодец|чекун\S*|чеку нет|чеку конец|шеф)[, ]+)?(выключи|останови|пауза|поставь на паузу|следующ|переключи|таймер сна)|через \S+ (минут|час)/i.test(text.trim())) ||
-    (/^((?:бурмалд\S*|бур молодец|бор молодец|чекун\S*|чеку нет|чеку конец|шеф)[, ]+)?(включи|поставь|вруби|сыграй)\s/i.test(text.trim()) && !/фонар|свет|таймер|будильник|звук|громк|режим|духовк|печ|гриль|аэрогрил|шаг/i.test(text))
+    (/музык|песн|трек|плейлист|альбом/i.test(text) && !/^((?:гудвин\S*|гуд вин|шеф)[, ]+)?(выключи|останови|пауза|поставь на паузу|следующ|переключи|таймер сна)|через \S+ (минут|час)/i.test(text.trim())) ||
+    (/^((?:гудвин\S*|гуд вин|шеф)[, ]+)?(включи|поставь|вруби|сыграй)\s/i.test(text.trim()) && !/фонар|свет|таймер|будильник|звук|громк|режим|духовк|печ|гриль|аэрогрил|шаг/i.test(text))
   if (!opts.image && !isMusic) {
     const q = await quick(text).catch(() => null)
     if (q) {
@@ -258,7 +282,7 @@ async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
         contents: history,
         tools: [{ functionDeclarations: toolsFor(getMode(), text) }],
         generationConfig: { temperature: 0.7, maxOutputTokens: eco() ? 700 : 900 },
-      })
+      }, chatBrain())
       halted()
       history.push(content)
       const calls = content.parts.filter((p) => p.functionCall)
@@ -280,7 +304,7 @@ async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
           continue
         }
         trim()
-        // «готовим первый» = первый, кого Бурмалдец НАЗВАЛ вслух, а не первый в выдаче поиска
+        // «готовим первый» = первый, кого Гудвин НАЗВАЛ вслух, а не первый в выдаче поиска
         if (found.length) rememberFound(byMention(found, t))
         return parseReply(t || '[думаю] Хм, не нашёлся с ответом.')
       }

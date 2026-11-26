@@ -20,8 +20,8 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Сценарии «когда X → сделай Y» (как в MacroDroid). Хранятся на телефоне и работают без открытого Бурмалдеца:
- * время — через будильники системы, события (зарядка, наушники, экран, Wi-Fi, Bluetooth) — через службу Бурмалдеца,
+ * Сценарии «когда X → сделай Y» (как в MacroDroid). Хранятся на телефоне и работают без открытого Гудвина:
+ * время — через будильники системы, события (зарядка, наушники, экран, Wi-Fi, Bluetooth) — через службу Гудвина,
  * открытие приложений и уведомления — через «Специальные возможности».
  */
 object Macros {
@@ -243,7 +243,7 @@ object Macros {
             "notify" -> {
                 channels(ctx)
                 val n = Notification.Builder(ctx, WakeService.CH_WAKE).setSmallIcon(R.drawable.ic_shef)
-                    .setContentTitle(a.optString("title").ifBlank { "Бурмалдец" }).setContentText(a.optString("text"))
+                    .setContentTitle(a.optString("title").ifBlank { "Гудвин" }).setContentText(a.optString("text"))
                     .setStyle(Notification.BigTextStyle().bigText(a.optString("text"))).setAutoCancel(true).build()
                 ctx.getSystemService(NotificationManager::class.java).notify((System.currentTimeMillis() % 100000).toInt() + 100, n)
             }
@@ -258,22 +258,22 @@ object Macros {
             "dnd" -> {
                 val nm = ctx.getSystemService(NotificationManager::class.java)
                 if (nm.isNotificationPolicyAccessGranted) nm.setInterruptionFilter(if (a.optBoolean("on", true)) NotificationManager.INTERRUPTION_FILTER_PRIORITY else NotificationManager.INTERRUPTION_FILTER_ALL)
-                else Journal.add(ctx, "недоработка", "нет доступа к «Не беспокоить» — выдайте Бурмалдецу в настройках")
+                else Journal.add(ctx, "недоработка", "нет доступа к «Не беспокоить» — выдайте Гудвину в настройках")
             }
             "brightness" -> {
                 if (Settings.System.canWrite(ctx)) {
                     Settings.System.putInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
                     Settings.System.putInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS, (a.optDouble("percent", 50.0) * 2.55).toInt().coerceIn(1, 255))
-                } else Journal.add(ctx, "недоработка", "нет разрешения менять яркость — выдайте Бурмалдецу «Изменение системных настроек»")
+                } else Journal.add(ctx, "недоработка", "нет разрешения менять яркость — выдайте Гудвину «Изменение системных настроек»")
             }
             "open_app" -> onMain { d.openApp(a.optString("app")) }
             "open_url" -> onMain { d.openUrl(a.optString("url")) }
             "play_music" -> onMain { d.playMusic(a.optString("query"), a.optString("app"), a.optString("kind"), a.optString("title"), a.optString("artist")) }
             "media" -> d.media(a.optString("action", "play"))
-            "timer" -> onMain { d.setTimer(a.optInt("seconds", 60), a.optString("text").ifBlank { "Бурмалдец" }) }
+            "timer" -> onMain { d.setTimer(a.optInt("seconds", 60), a.optString("text").ifBlank { "Гудвин" }) }
             "alarm" -> onMain {
                 val (h, mi) = a.optString("time", "07:00").split(":").let { (it.getOrNull(0)?.toIntOrNull() ?: 7) to (it.getOrNull(1)?.toIntOrNull() ?: 0) }
-                d.setAlarm(h, mi, a.optString("text").ifBlank { "Бурмалдец" })
+                d.setAlarm(h, mi, a.optString("text").ifBlank { "Гудвин" })
             }
             "navigate" -> onMain { d.navigate(a.optString("place"), a.optString("mode", "drive")) }
             "open_settings" -> onMain { d.openSettings(a.optString("what")) }
@@ -289,7 +289,7 @@ object Macros {
                 ShefAccess.inst?.tapText("com.whatsapp:id/send", "com.whatsapp.w4b:id/send", "Отправить", "Send")
             }
             "shef" -> onMain {
-                // сложная команда — открываем Бурмалдеца, он выполнит её как голосовую
+                // сложная команда — открываем Гудвина, он выполнит её как голосовую
                 ctx.startActivity(Intent(ctx, MainActivity::class.java).putExtra(MainActivity.EXTRA_CMD, a.optString("text")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
             }
         }

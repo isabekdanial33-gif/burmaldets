@@ -7,7 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 
-/** После перезагрузки телефона снова слушаем «Бурмалдец». Если Android не разрешит запустить микрофон из фона — просим одно нажатие. */
+/** После перезагрузки телефона снова слушаем «Гудвин». Если Android не разрешит запустить микрофон из фона — просим одно нажатие. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         Macros.schedule(ctx)
@@ -18,8 +18,8 @@ class BootReceiver : BroadcastReceiver() {
         val pi = PendingIntent.getActivity(ctx, 2, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val n = Notification.Builder(ctx, WakeService.CH_WAKE)
             .setSmallIcon(R.drawable.ic_shef)
-            .setContentTitle("Бурмалдец ждёт")
-            .setContentText("Нажмите один раз — и Бурмалдец снова будет слушать")
+            .setContentTitle("Гудвин ждёт")
+            .setContentText("Нажмите один раз — и Гудвин снова будет слушать")
             .setContentIntent(pi)
             .setAutoCancel(true)
             .build()

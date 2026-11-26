@@ -1,5 +1,5 @@
-// Голограмма-пирамида (призрак Пеппера): 4 копии Бурмалдеца вокруг центра экрана.
-// На экран ставится прозрачная пирамидка (узким концом вниз, в центр) — и Бурмалдец «висит» внутри в воздухе.
+// Голограмма-пирамида (призрак Пеппера): 4 копии Гудвина вокруг центра экрана.
+// На экран ставится прозрачная пирамидка (узким концом вниз, в центр) — и Гудвин «висит» внутри в воздухе.
 // Каждая копия «смотрит» макушкой от центра и отражена зеркально: пластик переворачивает её обратно.
 import { useEffect, useRef } from 'react'
 import type { Emotion } from './brain'
@@ -54,7 +54,7 @@ export default function Pyramid({ phase, emotion, poke }: { phase: Phase; emotio
       <div className="pyramid-src" aria-hidden>
         <Holo phase={phase} emotion={emotion} poke={poke} bare onCanvas={(cv) => (src.current = cv)} />
       </div>
-      <canvas ref={out} className="pyramid-out" aria-label="Голограмма Бурмалдеца для пирамиды" />
+      <canvas ref={out} className="pyramid-out" aria-label="Голограмма Гудвина для пирамиды" />
     </div>
   )
 }

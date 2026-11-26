@@ -1,4 +1,4 @@
-// Настройки «мозга» Бурмалдеца: провайдер, ключ, модель, голос. Всё хранится только на этом устройстве.
+// Настройки «мозга» Гудвина: провайдер, ключ, модель, голос. Всё хранится только на этом устройстве.
 import { http } from './net'
 
 export type ProviderId = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'groq' | 'deepseek' | 'mistral' | 'xai' | 'custom'
@@ -70,10 +70,27 @@ export type Cfg = {
   /** Своё дополнение к характеру. */
   persona: string
   setup: boolean
-  /** Как распознаватель слышит имя голосом хозяина (из обучения): «отец», «бурма отец»... */
+  /** Как распознаватель слышит имя голосом хозяина (из обучения), если стандартное «гудвин» не ловится */
   wakeExtra?: string[]
   /** Экономный режим (как в Джарвисе): меньше токенов и запросов к ИИ. По умолчанию включён. */
   eco?: boolean
+  /** Эко-лимит в день: запросов и токенов ИИ (0 — без ограничения). */
+  limitRequests?: number
+  limitTokens?: number
+  /** Свои агенты: у каждого отдельный провайдер, ключ, модель и характер. */
+  agents?: Agent[]
+}
+
+/** Агент: отдельный «мозг» (провайдер, ключ, модель) и характер. sub — его может звать на помощь главный (суб-агент). */
+export type Agent = { id: string; name: string; provider: ProviderId; key: string; model: string; base?: string; instructions: string; sub: boolean }
+/** С каким «мозгом» говорить: основной из настроек или агента. */
+export type Brain = { provider: ProviderId; model: string; key?: string; base?: string; backup?: string[]; who?: string }
+export const agentBrain = (a: Agent): Brain => ({ provider: a.provider, model: a.model, key: a.key?.trim() || undefined, base: a.base?.trim() || undefined, who: a.id })
+export const getAgents = () => getCfg().agents || []
+export const findAgent = (q: string) => {
+  const s = q.toLowerCase().trim()
+  const all = getAgents()
+  return all.find((a) => a.id === q) || all.find((a) => a.name.toLowerCase() === s) || all.find((a) => a.name.toLowerCase().includes(s))
 }
 
 const KEY = 'bm:cfg'
@@ -111,9 +128,9 @@ export const aiReady = () => {
   return !!c.model && (c.provider === 'custom' ? !!baseFor('custom') : !!keyFor(c.provider))
 }
 
-export function authHeaders(id: ProviderId): Record<string, string> {
+export function authHeaders(id: ProviderId, key?: string): Record<string, string> {
   const p = provider(id)
-  const k = keyFor(id)
+  const k = (key ?? keyFor(id)).trim()
   if (p.kind === 'gemini') return { 'x-goog-api-key': k }
   if (p.kind === 'anthropic') return { 'x-api-key': k, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
   const h: Record<string, string> = k ? { Authorization: 'Bearer ' + k } : {}

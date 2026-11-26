@@ -1,5 +1,5 @@
-// Журнал недоработок «Бурмалдеца»: что не понял, где ошибся, что заметил в рецептах.
-// На телефоне — файл Android/data/kz.mygrandchef.shef/files/Бурмалдец-журнал.txt, на компьютере — в браузере (кнопка «Журнал»).
+// Журнал недоработок «Гудвина»: что не понял, где ошибся, что заметил в рецептах.
+// На телефоне — файл Android/data/kz.mygrandchef.shef/files/Гудвин-журнал.txt, на компьютере — в браузере (кнопка «Журнал»).
 import { isAndroid, nativeCall } from './bridge'
 
 const KEY = 'shef:log'
@@ -27,7 +27,7 @@ export function downloadLog() {
   const blob = new Blob([readLog().join('\n') + '\n'], { type: 'text/plain;charset=utf-8' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = 'Бурмалдец-журнал.txt'
+  a.download = 'Гудвин-журнал.txt'
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 5000)
 }

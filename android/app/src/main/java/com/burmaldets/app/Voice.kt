@@ -16,7 +16,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.Locale
 
-/** Голос и слух Бурмалдеца на телефоне. */
+/** Голос и слух Гудвина на телефоне. */
 class Voice(private val ctx: Context, private val emit: (String, String) -> Unit) : TextToSpeech.OnInitListener {
     private val main = Handler(Looper.getMainLooper())
     private val prefs = ctx.getSharedPreferences("shef", Context.MODE_PRIVATE)
@@ -115,7 +115,7 @@ class Voice(private val ctx: Context, private val emit: (String, String) -> Unit
 
     /**
      * Одна фраза. Сначала распознавание Google (точнее); если оно ошиблось или его нет — Vosk прямо на телефоне.
-     * cb(текст, как_услышали) — «как» пишется в журнал, чтобы понимать, почему Бурмалдец не расслышал.
+     * cb(текст, как_услышали) — «как» пишется в журнал, чтобы понимать, почему Гудвин не расслышал.
      */
     fun listen(cb: (String, String) -> Unit) {
         val my = ++listenSeq
@@ -211,7 +211,7 @@ class Voice(private val ctx: Context, private val emit: (String, String) -> Unit
                 vosk("google start ${e.message}", 9000)
             }
         }
-        // микрофону нужно мгновение, чтобы освободиться после службы «Бурмалдец»
+        // микрофону нужно мгновение, чтобы освободиться после службы «Гудвин»
         main.postDelayed({ attempt() }, 150)
     }
 
@@ -230,7 +230,7 @@ class Voice(private val ctx: Context, private val emit: (String, String) -> Unit
 
 /** Журнал недоработок — обычный текстовый файл, его можно открыть или переслать. */
 object Journal {
-    fun file(ctx: Context) = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "Бурмалдец-журнал.txt")
+    fun file(ctx: Context) = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "Гудвин-журнал.txt")
     fun add(ctx: Context, kind: String, text: String) = line(ctx, "${java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("ru")).format(java.util.Date())} [$kind] $text")
     fun line(ctx: Context, line: String) {
         try {

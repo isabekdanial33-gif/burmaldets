@@ -26,7 +26,7 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
-    <!-- какие приложения Бурмалдец может найти на телефоне (Android 11+ иначе их «не видно») -->
+    <!-- какие приложения Гудвин может найти на телефоне (Android 11+ иначе их «не видно») -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <queries>
         <package android:name="ru.yandex.music" />
@@ -87,7 +87,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="Бурмалдец"
+        android:label="Гудвин"
         android:supportsRtl="false"
         android:theme="@style/Theme.Shef"
         android:usesCleartextTraffic="false">
@@ -112,7 +112,7 @@
         <service
             android:name=".ShefAccess"
             android:exported="false"
-            android:label="Бурмалдец — управление телефоном"
+            android:label="Гудвин — управление телефоном"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

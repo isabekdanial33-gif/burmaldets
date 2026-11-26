@@ -14,8 +14,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * «Руки» Бурмалдеца: видит, что на экране любого приложения, нажимает, печатает, листает, жмёт «Назад»/«Домой».
- * Включается человеком в «Специальных возможностях». Пароли Бурмалдец не вводит.
+ * «Руки» Гудвина: видит, что на экране любого приложения, нажимает, печатает, листает, жмёт «Назад»/«Домой».
+ * Включается человеком в «Специальных возможностях». Пароли Гудвин не вводит.
  */
 class ShefAccess : AccessibilityService() {
 
@@ -67,7 +67,7 @@ class ShefAccess : AccessibilityService() {
                 val title = ex?.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString().orEmpty()
                 val body = (ex?.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT) ?: ex?.getCharSequence(android.app.Notification.EXTRA_TEXT))?.toString().orEmpty()
                 val text = "$title $body " + e.text.joinToString(" ")
-                // служебные «идёт загрузка», «Бурмалдец слушает» и т.п. не запоминаем
+                // служебные «идёт загрузка», «Гудвин слушает» и т.п. не запоминаем
                 val ongoing = n != null && (n.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
                 if (!ongoing && (title.isNotBlank() || body.isNotBlank())) Notes.add(JSONObject().put("app", appName(pkg)).put("package", pkg).put("title", title.take(80)).put("text", body.take(400)).put("time", System.currentTimeMillis()))
                 if (!Macros.hasTrigger(this, "notification")) return

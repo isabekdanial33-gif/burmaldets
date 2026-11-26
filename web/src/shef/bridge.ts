@@ -1,4 +1,4 @@
-// Мост к нативной части Android-приложения «Бурмалдец». На компьютере/в браузере его нет — тогда всё делает веб.
+// Мост к нативной части Android-приложения «Гудвин». На компьютере/в браузере его нет — тогда всё делает веб.
 type Native = { call(id: string, method: string, args: string): void; platform(): string }
 type W = Window & {
   ShefNative?: Native
@@ -32,7 +32,7 @@ w.__shefEvent = (name, json) => {
   }
   listeners.get(name)?.forEach((f) => f(d))
 }
-/** События от телефона: wake (услышал «Бурмалдец»), stt-partial, tts-level, back. */
+/** События от телефона: wake (услышал «Гудвин»), stt-partial, tts-level, back. */
 export function onNative(name: string, f: (d: unknown) => void) {
   if (!listeners.has(name)) listeners.set(name, new Set())
   listeners.get(name)!.add(f)

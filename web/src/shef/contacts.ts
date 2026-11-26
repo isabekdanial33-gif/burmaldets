@@ -1,5 +1,5 @@
 // Контакты и звонки. Номера не уходят в Gemini — имена сравниваются здесь, на устройстве.
-// Звонок — ТОЛЬКО после явного «да» пользователя: Бурмалдец сначала спрашивает, кому именно звонить.
+// Звонок — ТОЛЬКО после явного «да» пользователя: Гудвин сначала спрашивает, кому именно звонить.
 import { isAndroid, nativeCall } from './bridge'
 
 export type Contact = { name: string; number: string; starred?: boolean; times?: number }
@@ -100,9 +100,9 @@ export async function placeCall(c: Contact): Promise<{ ok: boolean; mode?: strin
 
 /** Найти и спросить подтверждение. Никогда не звонит сам. */
 export async function prepareCall(who: string): Promise<{ text: string; ok: boolean }> {
-  if (!isAndroid) return { ok: false, text: 'Звонить я умею только в приложении Бурмалдец на телефоне.' }
+  if (!isAndroid) return { ok: false, text: 'Звонить я умею только в приложении Гудвин на телефоне.' }
   const { list, error } = await getContacts()
-  if (error === 'denied') return { ok: false, text: 'Нет доступа к контактам. Разрешите «Контакты» для Бурмалдеца в настройках телефона, и я смогу звонить.' }
+  if (error === 'denied') return { ok: false, text: 'Нет доступа к контактам. Разрешите «Контакты» для Гудвина в настройках телефона, и я смогу звонить.' }
   if (error) return { ok: false, text: 'Не получилось прочитать контакты.' }
   const found = matchContacts(who, list)
   if (!found.length) {

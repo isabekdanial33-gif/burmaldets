@@ -26,8 +26,8 @@ import kotlin.math.hypot
 import kotlin.math.sin
 
 /**
- * Плавающая кнопка Бурмалдеца поверх всех приложений (как «пузырь» чата).
- * Нажать — Бурмалдец слушает; перетащить — куда удобно (прилипает к краю); бросить на ✕ внизу — спрятать.
+ * Плавающая кнопка Гудвина поверх всех приложений (как «пузырь» чата).
+ * Нажать — Гудвин слушает; перетащить — куда удобно (прилипает к краю); бросить на ✕ внизу — спрятать.
  * Живёт в службе WakeService, поэтому видна и когда само приложение закрыто.
  */
 class Bubble(private val ctx: Context, private val onTap: () -> Unit) {
@@ -76,7 +76,7 @@ class Bubble(private val ctx: Context, private val onTap: () -> Unit) {
         hideTrash()
     }
 
-    /** Пока открыт сам Бурмалдец, кнопка не нужна. */
+    /** Пока открыт сам Гудвин, кнопка не нужна. */
     fun appVisible(v: Boolean) {
         hiddenByApp = v
         if (v) hide() else if (enabled(ctx)) show()
@@ -136,7 +136,7 @@ class Bubble(private val ctx: Context, private val onTap: () -> Unit) {
 
         init {
             setLayerType(LAYER_TYPE_SOFTWARE, null) // для размытого свечения
-            contentDescription = "Бурмалдец — нажмите, чтобы говорить"
+            contentDescription = "Гудвин — нажмите, чтобы говорить"
         }
 
         /** После нескольких секунд без дела кнопка становится полупрозрачной, чтобы не мешать. */

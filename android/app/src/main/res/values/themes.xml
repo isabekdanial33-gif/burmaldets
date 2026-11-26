@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- прозрачная тема: так Бурмалдец может открыться «шторкой» поверх другого приложения -->
+    <!-- прозрачная тема: так Гудвин может открыться «шторкой» поверх другого приложения -->
     <style name="Theme.Shef" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>

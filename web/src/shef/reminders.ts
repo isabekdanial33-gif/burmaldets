@@ -1,4 +1,4 @@
-// Напоминания и таймер сна. На телефоне — разовый сценарий в фоне (AlarmManager): сработает, даже если Бурмалдец закрыт,
+// Напоминания и таймер сна. На телефоне — разовый сценарий в фоне (AlarmManager): сработает, даже если Гудвин закрыт,
 // и после срабатывания удалится сам. На компьютере — пока открыта вкладка.
 import { isAndroid } from './bridge'
 import { addMacro, forgetCache, listMacros, type Macro } from './macros'
@@ -86,7 +86,7 @@ export async function setReminder(text: string, at: string, inMin: number): Prom
       ok: r.ok,
       when: fmt(ms),
       text: t,
-      note: st && !st.exact ? 'Точные будильники для Бурмалдеца выключены — напоминание может прийти с опозданием до минуты-двух. Включить: grant_permission exact.' : undefined,
+      note: st && !st.exact ? 'Точные будильники для Гудвина выключены — напоминание может прийти с опозданием до минуты-двух. Включить: grant_permission exact.' : undefined,
     }
   }
   const r: PcR = { id: 'r' + Date.now().toString(36), text: t, at: ms, kind: 'remind' }
@@ -97,7 +97,7 @@ export async function setReminder(text: string, at: string, inMin: number): Prom
   } catch {
     /* пусто */
   }
-  return { ok: true, when: fmt(ms), text: t, note: 'На компьютере напоминание сработает, только если вкладка Бурмалдеца будет открыта.' }
+  return { ok: true, when: fmt(ms), text: t, note: 'На компьютере напоминание сработает, только если вкладка Гудвина будет открыта.' }
 }
 
 async function androidReminders(): Promise<R[]> {
@@ -134,7 +134,7 @@ export async function cancelReminder(what: string): Promise<Obj> {
 
 export async function sleepTimer(minutes: number): Promise<Obj> {
   if (!(minutes > 0)) return { ok: false, error: 'Через сколько минут выключить музыку?' }
-  if (!isAndroid) return { ok: false, note: 'Таймер сна работает только в приложении Бурмалдец на телефоне.' }
+  if (!isAndroid) return { ok: false, note: 'Таймер сна работает только в приложении Гудвин на телефоне.' }
   const ms = Date.now() + Math.round(minutes * 60000)
   const d = new Date(ms)
   const r = await addMacro({

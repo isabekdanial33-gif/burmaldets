@@ -1,5 +1,5 @@
-// Сценарии «когда X → сделай Y» (как MacroDroid). Создаются голосом: Бурмалдец описывает сценарий и создаёт его только после «да».
-// Работают на телефоне сами, даже когда Бурмалдец закрыт.
+// Сценарии «когда X → сделай Y» (как MacroDroid). Создаются голосом: Гудвин описывает сценарий и создаёт его только после «да».
+// Работают на телефоне сами, даже когда Гудвин закрыт.
 import { isAndroid, nativeCall } from './bridge'
 import { getContacts, matchContacts } from './contacts'
 
@@ -132,7 +132,7 @@ export function actionText(a: Action): string {
     case 'send_message':
       return `написать «${s(a.name) || s(a.number)}»${a.app && a.app !== 'sms' ? ' в ' + s(a.app) : ' SMS'}: «${s(a.text)}»`
     case 'shef':
-      return `попросить Бурмалдеца: «${s(a.text)}»`
+      return `попросить Гудвина: «${s(a.text)}»`
     default:
       return a.type
   }
@@ -178,10 +178,10 @@ export async function addMacro(m: Omit<Macro, 'id'>) {
   return nativeCall<{ ok: boolean; id: string }>('macroAdd', { macro: m }, 8000)
 }
 
-/** Голосовой триггер: «Бурмалдец, режим кухни» запускает сценарий с этой фразой. */
+/** Голосовой триггер: «Гудвин, режим кухни» запускает сценарий с этой фразой. */
 export async function voiceMacro(text: string): Promise<Macro | null> {
   if (!isAndroid) return null
-  const norm = (x: string) => x.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/^\s*(?:бурмалд\S*|бур молодец|бор молодец|чекун\S*|чеку нет|чеку конец|шеф)\s+/, '').replace(/\s+/g, ' ').trim()
+  const norm = (x: string) => x.toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\p{N} ]+/gu, ' ').replace(/^\s*(?:гудвин\S*|гуд вин|шеф)\s+/, '').replace(/\s+/g, ' ').trim()
   const t = norm(text)
   const r = await listMacros().catch(() => null)
   const m = r?.macros.find((x) => x.enabled !== false && x.trigger.type === 'voice' && x.trigger.phrase && norm(x.trigger.phrase) === t)

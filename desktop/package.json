@@ -1,8 +1,8 @@
 {
   "name": "burmaldets-desktop",
-  "productName": "Бурмалдец",
-  "version": "2.1.0",
-  "description": "Бурмалдец (он же Чекунец) — голосовой ИИ-ассистент для Windows",
+  "productName": "Гудвин",
+  "version": "3.0.0",
+  "description": "Гудвин — голосовой ИИ-ассистент для Windows",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -50,7 +50,7 @@
       "oneClick": true,
       "perMachine": false,
       "runAfterFinish": true,
-      "shortcutName": "Бурмалдец",
+      "shortcutName": "Гудвин",
       "artifactName": "Burmaldets-Setup-${version}.${ext}"
     }
   },

@@ -24,16 +24,24 @@ const enc = (s) => safeStorage.encryptString(String(s)).toString('base64')
 const dec = (s) => safeStorage.decryptString(Buffer.from(s, 'base64'))
 
 /** Список без секретов: что можно показать и модели, и в настройках. */
-const list = () => load().map(({ id, name, site }) => ({ id, name, site }))
+const list = () => load().map(({ id, name, site, auto }) => ({ id, name, site, auto: !!auto }))
 
-function add({ name, site, login, password }) {
+function add({ name, site, login, password, auto }) {
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows не даёт зашифровать данные — аккаунт не сохранён')
   name = String(name || '').trim()
   if (!name || !login || !password) throw new Error('Нужны название, логин и пароль')
   load()
   const id = crypto.randomUUID().slice(0, 8)
   cache = cache.filter((a) => a.name.toLowerCase() !== name.toLowerCase())
-  cache.push({ id, name, site: String(site || '').trim(), login: enc(login), password: enc(password) })
+  cache.push({ id, name, site: String(site || '').trim(), login: enc(login), password: enc(password), auto: !!auto })
+  save()
+  return list()
+}
+/** «Входить самому без вопроса» — включает и выключает сам пользователь в настройках. */
+function setAuto(id, on) {
+  load()
+  const a = cache.find((x) => x.id === id)
+  if (a) a.auto = !!on
   save()
   return list()
 }
@@ -54,4 +62,4 @@ function secrets(a) {
   return { login: dec(a.login), password: dec(a.password) }
 }
 
-module.exports = { list, add, remove, find, secrets }
+module.exports = { list, add, remove, setAuto, find, secrets }

@@ -1,10 +1,24 @@
-// Слух Бурмалдеца в приложении для компьютера (Electron): там нет распознавания Google из браузера.
-// Слово «Бурмалдец»/«Чекунец» ловит Vosk прямо на компьютере (звук никуда не уходит).
+// Слух Гудвина в приложении для компьютера (Electron): там нет распознавания Google из браузера.
+// Слово «Гудвин» ловит Vosk прямо на компьютере (звук никуда не уходит).
 // Команду после него — облачное распознавание по вашему ключу (Groq/OpenAI Whisper или Gemini), без ключа — тоже Vosk.
 import type { KaldiRecognizer, Model } from 'vosk-browser'
-import { cloudStt, transcribe } from './llm'
+import { cloudStt, transcribe, verifyName } from './llm'
 import { desk, isDesktop } from './net'
-import { afterWake, wakeEnd, type Word } from './wake'
+import { afterWake, wakeEnd, norm, WAKE_WORDS } from './wake'
+
+type WordConf = { word: string; start: number; end: number; conf: number }
+/** Минимальная уверенность Vosk в словах имени (0..1). */
+const MIN_CONF = 0.6
+/** Уверенность в словах, из которых сложилось имя (последние до конца совпадения, не больше трёх). */
+function nameConf(text: string, end: number, words?: WordConf[]) {
+  if (!words?.length) return 1
+  // слова Vosk идут ровно как в тексте: имя — последние слова до конца совпадения
+  const upto = norm(text).slice(0, end).split(' ').filter(Boolean)
+  const k = Math.min(words.length, upto.length)
+  // имя — одно слово; выученная фраза бывает из двух
+  const take = k >= 2 && !/^гудвин/.test(upto[upto.length - 1]) ? 2 : 1
+  return words.slice(Math.max(0, k - take), k).reduce((m, w) => Math.min(m, w.conf ?? 1), 1)
+}
 
 type Level = { value: number }
 /** Короткий журнал слуха (для отладки): window.__bmEar */
@@ -81,14 +95,34 @@ export async function deskWake(onWake: (rest: string) => void) {
     const rec = new m.KaldiRecognizer(RATE)
     rec.setWords(true)
     wakeRec = rec
-    let fired = false
-    let timer = 0
-    const fire = (text: string, final: boolean, words?: Word[]) => {
-      const end = wakeEnd(text, undefined, final, words)
+    // звук текущей фразы — для облачной перепроверки имени (не больше 12 секунд)
+    let utt: Float32Array[] = []
+    let checking = false
+    const fire = async (text: string, words?: WordConf[]) => {
+      const end = wakeEnd(text, undefined, true, words)
       if (end < 0) return false
-      note('wake: ' + text)
+      // уверенность распознавателя в словах имени: невнятное «бур… молод…» не будит
+      const conf = nameConf(text, end, words)
+      note(`кандидат: ${text} (уверенность ${conf.toFixed(2)})`)
+      if (conf < MIN_CONF) {
+        note('отклонено: нечётко')
+        return false
+      }
+      // чёткое «Гудвин» будит сразу; сомнительное (уверенность ниже 0.9 или выученная фраза) — только если облако подтвердит
+      let ok: boolean | null = null
+      const sure = conf >= 0.9 && WAKE_WORDS.test(norm(text))
+      if (!sure && cloudStt()) {
+        checking = true
+        ok = await verifyName(toWav(utt), 5000).catch(() => null)
+        checking = false
+        if (ok !== true) {
+          note(ok === false ? 'отклонено облаком: не имя' : 'отклонено: облако не подтвердило')
+          return false
+        }
+      }
+      if (!wakeOn || wakeRec !== rec) return false
+      note('wake: ' + text + (ok ? ' (облако: да)' : ''))
       const rest = afterWake(text, end)
-      clearTimeout(timer)
       stopDeskWake()
       // позвали по имени — показываем панель у шара
       void (desk!.call as (m: string, a: object) => Promise<unknown>)('showPanel', {})
@@ -96,21 +130,25 @@ export async function deskWake(onWake: (rest: string) => void) {
       wakeCb?.(rest.split(' ').length >= 2 ? rest : '')
       return true
     }
-    rec.on('partialresult', (msg) => {
-      const p = (msg as { result: { partial: string } }).result.partial
-      if (!fired && wakeEnd(p, undefined, false) >= 0) {
-        fired = true
-        // ждём конец фразы: вдруг команда идёт сразу за словом
-        timer = window.setTimeout(() => fire(p, false) || (fired = false), 1600)
+    // будим только по законченной фразе (после паузы), а не по промежуточной догадке распознавателя
+    rec.on('result', (msg) => {
+      const r = (msg as { result: { text: string; result?: WordConf[] } }).result
+      const t = r.text || ''
+      const audio = utt
+      utt = []
+      if (t && !checking) {
+        utt = audio // для проверки нужен звук именно этой фразы
+        void fire(t, r.result).finally(() => (utt = []))
       }
     })
-    rec.on('result', (msg) => {
-      const r = (msg as { result: { text: string; result?: Word[] } }).result
-      const t = r.text || ''
-      if (t && fire(t, true, r.result)) return
-      if (fired) fired = false
-    })
-    sink = (b) => wakeRec === rec && rec.acceptWaveformFloat(b, RATE)
+    sink = (b) => {
+      if (wakeRec !== rec) return
+      if (!checking) {
+        utt.push(b)
+        if (utt.length > 48) utt.shift() // ~12 с
+      }
+      rec.acceptWaveformFloat(b, RATE)
+    }
     console.info('[bm] wake ready')
   } catch (e) {
     wakeOn = false

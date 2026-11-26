@@ -81,7 +81,7 @@ function risky(steps: Obj[]): string | null {
 
 export const PC_EXEC: Record<string, (a: Obj) => Promise<Result | Obj>> = {
   async pc_look(a) {
-    if (!isDesktop) return { ok: false, note: 'Это работает в приложении «Бурмалдец» для Windows.' }
+    if (!isDesktop) return { ok: false, note: 'Это работает в приложении «Гудвин» для Windows.' }
     const r = keep(await call('pcLook', { image: !!a.image, window: a.window }))
     if (!r.ok) return r
     const out: Obj = {
@@ -98,7 +98,7 @@ export const PC_EXEC: Record<string, (a: Obj) => Promise<Result | Obj>> = {
   },
 
   async pc_act(a) {
-    if (!isDesktop) return { ok: false, note: 'Это работает в приложении «Бурмалдец» для Windows.' }
+    if (!isDesktop) return { ok: false, note: 'Это работает в приложении «Гудвин» для Windows.' }
     const steps = (Array.isArray(a.steps) ? a.steps : []) as Obj[]
     if (!steps.length) return { ok: false, error: 'нет шагов' }
     const why = a._confirmed ? null : risky(steps)
@@ -122,12 +122,17 @@ export const PC_EXEC: Record<string, (a: Obj) => Promise<Result | Obj>> = {
 
   async pc_login(a) {
     if (!isDesktop) return { ok: false, note: 'Аккаунты хранятся в приложении для Windows.' }
-    const list = ((await call('accList', {})).list || []) as { id: string; name: string; site: string }[]
+    const list = ((await call('accList', {})).list || []) as { id: string; name: string; site: string; auto?: boolean }[]
     const q = String(a.account || '').toLowerCase()
     const acc = list.find((x) => x.id === q || x.name.toLowerCase() === q) || list.find((x) => x.name.toLowerCase().includes(q) || (x.site && x.site.toLowerCase().includes(q)))
     if (!acc) return { ok: false, error: 'нет такого сохранённого аккаунта', saved: list.map((x) => x.name), tell_user: 'Аккаунты добавляются в Настройках → Аккаунты.' }
     if (!win) return { ok: false, error: 'сначала открой страницу входа и посмотри на экран (pc_look)' }
     const args = { account: acc.id, login_el: a.login_el, password_el: a.password_el, submit: !!a.submit }
+    // «входить самому» включил пользователь — не спрашиваем каждый раз
+    if (acc.auto) {
+      const r = keep(await call('pcLogin', args))
+      return r.ok ? { ...r, note: `Вошёл данными «${acc.name}». Логин и пароль не называй.` } : r
+    }
     const question = askConfirm(`Ввести логин и пароль «${acc.name}» в окно «${win.slice(0, 50)}»? Скажите «да» или «нет».`, async () => {
       const r = keep(await call('pcLogin', args))
       return r.ok ? `Вошёл данными «${acc.name}»${args.submit ? '' : ', осталось нажать «Войти»'}.` : `Не получилось: ${String(r.error || '')}`

@@ -1,8 +1,9 @@
-// Инструменты Бурмалдеца: их вызывает Gemini (function calling), а без интернета — локальный мозг.
+// Инструменты Гудвина: их вызывает Gemini (function calling), а без интернета — локальный мозг.
 // Всё состояние (корзина, холодильник, избранное) — то же, что у сайта на этом устройстве.
 import { ACTIONS, addMacro, forgetCache, listMacros, macroText, resolveContacts, TRIGGERS, type Action, type Trigger } from './macros'
 import { askConfirm, RISKY } from './confirm'
 import { PC_DECLS, PC_EXEC } from './pctools'
+import { SUB_EXEC } from './subagents'
 import { getContacts, matchContacts, prepareCall } from './contacts'
 import { getSearch, loadIndex, loadRecipe, type IndexItem, type Recipe } from '../data'
 import { fridgeMatch, keyOf } from '../fridge'
@@ -23,7 +24,7 @@ import { cancelReminder, listReminders, setReminder, sleepTimer } from './remind
 type Obj = Record<string, unknown>
 export type ToolResult = { result: Obj; extra?: Part[] }
 
-/** Сообщения для экрана Бурмалдеца: кнопка-ссылка (если браузер не дал открыть сам), переход по сайту после ответа. */
+/** Сообщения для экрана Гудвина: кнопка-ссылка (если браузер не дал открыть сам), переход по сайту после ответа. */
 export const ui = {
   link: null as null | { label: string; url: string },
   card: null as null | Card,
@@ -189,10 +190,10 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const SCREEN_OFF = {
   ok: false,
   error: 'screen_control_off',
-  tell_user: 'Чтобы я управлял телефоном, включите «Бурмалдец — управление телефоном» в Специальных возможностях. Могу открыть эту настройку (enable_screen_control).',
+  tell_user: 'Чтобы я управлял телефоном, включите «Гудвин — управление телефоном» в Специальных возможностях. Могу открыть эту настройку (enable_screen_control).',
 }
 
-/** Действия на компьютере — через приложение Бурмалдец для Windows. */
+/** Действия на компьютере — через приложение Гудвин для Windows. */
 export const deskCall = async (method: string, args: Obj): Promise<Obj> => {
   try {
     return await (desk!.call as (m: string, a: Obj) => Promise<Obj>)(method, args)
@@ -203,7 +204,7 @@ export const deskCall = async (method: string, args: Obj): Promise<Obj> => {
 
 const dev = async (method: string, args: Obj, why: string): Promise<Obj> => {
   if (isDesktop) return deskCall(method, args)
-  if (!isAndroid) return { ok: false, note: `Это работает только в приложении «Бурмалдец» на телефоне (${why}). Сейчас устройство: ${platform}.` }
+  if (!isAndroid) return { ok: false, note: `Это работает только в приложении «Гудвин» на телефоне (${why}). Сейчас устройство: ${platform}.` }
   try {
     return await nativeCall<Obj>(method, args, 20000)
   } catch (e) {
@@ -276,9 +277,9 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
     return sleepTimer(num(a.minutes))
   },
   async read_notifications(a) {
-    if (!isAndroid) return { ok: false, note: 'Уведомления читаются только в приложении Бурмалдец на телефоне.' }
+    if (!isAndroid) return { ok: false, note: 'Уведомления читаются только в приложении Гудвин на телефоне.' }
     const r = await nativeCall<{ ok: boolean; list: { app: string; title: string; text: string; time: number }[] }>('notifications', { minutes: num(a.minutes) || 720, app: str(a.app) }, 5000)
-    if (!r.ok) return { ok: false, screen_control_off: true, note: 'Чтобы читать уведомления, включите Бурмалдецу управление телефоном (спец. возможности).' }
+    if (!r.ok) return { ok: false, screen_control_off: true, note: 'Чтобы читать уведомления, включите Гудвину управление телефоном (спец. возможности).' }
     return {
       ok: true,
       count: r.list.length,
@@ -286,20 +287,20 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
     }
   },
   async set_brightness(a) {
-    if (!isAndroid) return { ok: false, note: 'Яркость меняется только в приложении Бурмалдец на телефоне.' }
+    if (!isAndroid) return { ok: false, note: 'Яркость меняется только в приложении Гудвин на телефоне.' }
     const r = await nativeCall<{ ok: boolean; need?: string; percent?: number }>('brightness', Number.isFinite(num(a.percent)) ? { percent: num(a.percent) } : { direction: str(a.direction) || 'up' }, 5000)
     if (!r.ok) {
       await nativeCall('grant', { what: 'writeSettings' }, 5000).catch(() => {})
-      return { ok: false, note: 'Нужно разрешение «Изменение системных настроек» — открыл экран, включите переключатель для Бурмалдеца и повторите.' }
+      return { ok: false, note: 'Нужно разрешение «Изменение системных настроек» — открыл экран, включите переключатель для Гудвина и повторите.' }
     }
     return r
   },
   async do_not_disturb(a) {
-    if (!isAndroid) return { ok: false, note: '«Не беспокоить» включается только в приложении Бурмалдец на телефоне.' }
+    if (!isAndroid) return { ok: false, note: '«Не беспокоить» включается только в приложении Гудвин на телефоне.' }
     const r = await nativeCall<{ ok: boolean; need?: string; on?: boolean }>('dnd', { on: a.on !== false }, 5000)
     if (!r.ok) {
       await nativeCall('grant', { what: 'dnd' }, 5000).catch(() => {})
-      return { ok: false, note: 'Нужен доступ к режиму «Не беспокоить» — открыл экран, включите его для Бурмалдеца и повторите.' }
+      return { ok: false, note: 'Нужен доступ к режиму «Не беспокоить» — открыл экран, включите его для Гудвина и повторите.' }
     }
     return r
   },
@@ -311,9 +312,9 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
     }
   },
   async recent_calls(a) {
-    if (!isAndroid) return { ok: false, note: 'Журнал звонков доступен только в приложении Бурмалдец на телефоне.' }
+    if (!isAndroid) return { ok: false, note: 'Журнал звонков доступен только в приложении Гудвин на телефоне.' }
     const r = await nativeCall<{ ok: boolean; error?: string; calls?: { name: string; last4: string; type: string; time: number; seconds: number }[] }>('callLog', { limit: num(a.limit) || 8, missed: a.missed === true }, 20000)
-    if (!r.ok) return { ok: false, error: r.error === 'denied' ? 'Нет доступа к журналу звонков — разрешите его Бурмалдецу.' : r.error }
+    if (!r.ok) return { ok: false, error: r.error === 'denied' ? 'Нет доступа к журналу звонков — разрешите его Гудвину.' : r.error }
     return {
       ok: true,
       calls: r.calls!.map((c) => ({
@@ -334,9 +335,9 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
     return undoExpense()
   },
   async birthdays(a) {
-    if (!isAndroid) return { ok: false, note: 'Дни рождения из контактов доступны только в приложении Бурмалдец на телефоне.' }
+    if (!isAndroid) return { ok: false, note: 'Дни рождения из контактов доступны только в приложении Гудвин на телефоне.' }
     const r = await nativeCall<{ ok: boolean; error?: string; list?: { name: string; date: string }[] }>('birthdays', {}, 20000)
-    if (!r.ok) return { ok: false, error: r.error === 'denied' ? 'Нет доступа к контактам — разрешите его Бурмалдецу.' : r.error }
+    if (!r.ok) return { ok: false, error: r.error === 'denied' ? 'Нет доступа к контактам — разрешите его Гудвину.' : r.error }
     const now = new Date()
     now.setHours(0, 0, 0, 0)
     const days = num(a.days) || 30
@@ -365,9 +366,9 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
     return deleteNotes(str(a.query))
   },
   async calendar_events(a) {
-    if (!isAndroid) return { ok: false, note: 'Календарь читается только в приложении Бурмалдец на телефоне.' }
+    if (!isAndroid) return { ok: false, note: 'Календарь читается только в приложении Гудвин на телефоне.' }
     const r = await nativeCall<{ ok: boolean; error?: string; events?: { title: string; start: number; end: number; all_day: boolean; place: string }[] }>('calendar', { days: num(a.days) || 1 }, 20000)
-    if (!r.ok) return { ok: false, error: r.error === 'denied' ? 'Нет доступа к календарю — разрешите его Бурмалдецу.' : r.error }
+    if (!r.ok) return { ok: false, error: r.error === 'denied' ? 'Нет доступа к календарю — разрешите его Гудвину.' : r.error }
     const f = (ms: number) => new Date(ms).toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
     return { ok: true, count: r.events!.length, events: r.events!.map((e) => ({ title: e.title, when: e.all_day ? 'весь день ' + new Date(e.start).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : f(e.start), place: e.place || undefined })) }
   },
@@ -508,7 +509,7 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
   async set_timer(a) {
     const sec = Math.round(num(a.seconds))
     if (!(sec > 0)) return { error: 'Сколько секунд?' }
-    const label = str(a.label) || 'Бурмалдец'
+    const label = str(a.label) || 'Гудвин'
     if (isAndroid || isDesktop) {
       const r = await dev('setTimer', { seconds: sec, label }, 'таймер')
       if (r.ok) return { ok: true, where: isDesktop ? 'компьютер: уведомление и голос' : 'часы телефона', seconds: sec }
@@ -517,7 +518,7 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
     return { ok: true, where: 'в приложении', seconds: sec }
   },
   async set_alarm(a) {
-    return dev('setAlarm', { hour: num(a.hour), minute: num(a.minute) || 0, label: str(a.label) || 'Бурмалдец' }, 'будильник')
+    return dev('setAlarm', { hour: num(a.hour), minute: num(a.minute) || 0, label: str(a.label) || 'Гудвин' }, 'будильник')
   },
   async play_music(a) {
     const kind = str(a.kind)
@@ -591,7 +592,7 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
   },
   async enable_screen_control() {
     await dev('screenSettings', {}, 'управление экраном')
-    return { ok: true, tell_user: 'Открыл «Специальные возможности». Найдите «Бурмалдец — управление телефоном» (иногда в разделе «Установленные приложения»), включите и подтвердите. Если пункт серый — в «О приложении» Бурмалдеца нажмите ⋮ → «Разрешить ограниченные настройки» и попробуйте снова.' }
+    return { ok: true, tell_user: 'Открыл «Специальные возможности». Найдите «Гудвин — управление телефоном» (иногда в разделе «Установленные приложения»), включите и подтвердите. Если пункт серый — в «О приложении» Гудвина нажмите ⋮ → «Разрешить ограниченные настройки» и попробуйте снова.' }
   },
   async send_message(a) {
     const app = str(a.app) || 'sms'
@@ -636,7 +637,7 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
   },
   // ---------- сценарии (как MacroDroid) ----------
   async create_macro(a) {
-    if (!isAndroid) return { ok: false, note: 'Сценарии работают только в приложении Бурмалдец на телефоне.' }
+    if (!isAndroid) return { ok: false, note: 'Сценарии работают только в приложении Гудвин на телефоне.' }
     const trigger = (a.trigger || {}) as Trigger
     const name = str(a.name) || 'Сценарий'
     if (!TRIGGERS.includes(trigger.type)) return { ok: false, error: 'неизвестный триггер ' + trigger.type + '. Доступны: ' + TRIGGERS.join(', ') }
@@ -696,7 +697,7 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
     if (source === 'color' && !/^#[0-9a-f]{6}$/i.test(str(a.color))) return { ok: false, error: 'цвет нужен в виде #RRGGBB' }
     return isAndroid
       ? nativeCall('wallpaper', { source, color: str(a.color), color2: str(a.color2), url: str(a.url), target: str(a.target) || 'both' }, 180000).catch((e) => ({ ok: false, error: String(e) }))
-      : { ok: false, note: 'Обои меняю только в приложении Бурмалдец на телефоне.' }
+      : { ok: false, note: 'Обои меняю только в приложении Гудвин на телефоне.' }
   },
   async list_ringtones(a) {
     return dev('ringtones', { type: str(a.type) || 'ringtone' }, 'мелодии')
@@ -704,7 +705,7 @@ export const EXEC: Record<string, (a: Obj) => Promise<ToolResult | Obj>> = {
   async set_ringtone(a) {
     return isAndroid
       ? nativeCall('ringtone', { name: str(a.name), type: str(a.type) || 'ringtone', source: str(a.source) || 'system' }, 180000).catch((e) => ({ ok: false, error: String(e) }))
-      : { ok: false, note: 'Мелодии меняю только в приложении Бурмалдец на телефоне.' }
+      : { ok: false, note: 'Мелодии меняю только в приложении Гудвин на телефоне.' }
   },
   async media_control(a) {
     return dev('media', { action: str(a.action) }, 'управление музыкой')
@@ -769,7 +770,7 @@ export const DECLS = [
   fn('exchange_rates', 'Курс валют или криптовалют и пересчёт суммы.', { from: S('Из чего: USD, EUR, RUB, KZT, «доллар», «биткоин», BTC…'), to: A('Во что: KZT, RUB, USD…'), amount: N('Сумма, по умолчанию 1') }, ['from']),
   fn('wiki', 'Справка из Википедии: кто такой, что такое, где находится.', { query: S('Что найти') }, ['query']),
   fn('news', 'Свежие новости: главные или по теме (спорт, конкретный человек, событие, город, «кто выиграл…»).', { topic: S('Тема; пусто — главное'), limit: N('Сколько, до 10') }),
-  fn('set_reminder', 'Напомнить в нужный момент: уведомление и голос. Работает, даже если Бурмалдец закрыт.', { text: S('О чём напомнить'), at: S('Когда, ISO местного времени: 2026-11-26T09:00'), in_minutes: N('Или через сколько минут') }, ['text']),
+  fn('set_reminder', 'Напомнить в нужный момент: уведомление и голос. Работает, даже если Гудвин закрыт.', { text: S('О чём напомнить'), at: S('Когда, ISO местного времени: 2026-11-26T09:00'), in_minutes: N('Или через сколько минут') }, ['text']),
   fn('list_reminders', 'Какие напоминания стоят.'),
   fn('cancel_reminder', 'Отменить напоминание (по словам из текста) или все («все»).', { text: S('Какое') }, ['text']),
   fn('sleep_timer', 'Выключить музыку через N минут (таймер сна).', { minutes: N('Через сколько минут') }, ['minutes']),
@@ -835,7 +836,7 @@ export const DECLS = [
   fn('screen_type', 'Напечатать текст в поле (по номеру; без номера — в поле с курсором). Пароли не вводятся.', { i: N('Номер поля'), text: S('Текст'), append: B('Дописать, а не заменить') }, ['text']),
   fn('screen_scroll', 'Пролистать экран или список.', { direction: S('Куда', ['down', 'up', 'left', 'right']), i: N('Номер списка (необязательно)') }, ['direction']),
   fn('phone_action', 'Системные кнопки и действия телефона.', { action: S('Действие', ['back', 'home', 'recents', 'notifications', 'quick_settings', 'lock', 'screenshot', 'power_menu']) }, ['action']),
-  fn('enable_screen_control', 'Открыть настройки, где человек включает Бурмалдецу управление телефоном (если screen_* вернули screen_control_off).'),
+  fn('enable_screen_control', 'Открыть настройки, где человек включает Гудвину управление телефоном (если screen_* вернули screen_control_off).'),
   fn('send_message', 'Отправить сообщение контакту (SMS, WhatsApp, Telegram). Сам не отправляет — вернёт вопрос-подтверждение.', { to: S('Имя контакта или номер'), text: S('Текст сообщения'), app: S('Куда', ['sms', 'whatsapp', 'telegram']) }, ['to', 'text']),
   fn('navigate', 'Построить маршрут/найти место в картах (2ГИС, Яндекс, Google).', { place: S('Куда или что найти'), mode: S('Как', ['drive', 'walk', 'transit', 'bike']) }, ['place']),
   fn('open_settings', 'Открыть раздел настроек телефона (Wi-Fi и интернет открываются панелью, где их можно включить).', { what: S('Раздел', ['wifi', 'internet', 'bluetooth', 'volume', 'display', 'brightness', 'sound', 'battery', 'location', 'airplane', 'nfc', 'hotspot', 'dnd', 'apps', 'storage', 'date', 'accessibility', 'main']) }, ['what']),
@@ -844,7 +845,7 @@ export const DECLS = [
   fn('add_calendar_event', 'Добавить событие в календарь.', { title: S('Название'), start: S('Начало в ISO, например 2026-11-26T18:00'), minutes: N('Длительность в минутах') }, ['title', 'start']),
   fn(
     'create_macro',
-    'Создать сценарий-автоматизацию «когда X — сделай Y» (как MacroDroid). Работает в фоне, даже когда Бурмалдец закрыт. Сам не создаёт — вернёт вопрос-подтверждение.',
+    'Создать сценарий-автоматизацию «когда X — сделай Y» (как MacroDroid). Работает в фоне, даже когда Гудвин закрыт. Сам не создаёт — вернёт вопрос-подтверждение.',
     {
       name: S('Короткое название, например «Утро» или «Кухня»'),
       trigger: {
@@ -872,7 +873,7 @@ export const DECLS = [
           type: 'object',
           properties: {
             type: S('Действие', ACTIONS),
-            text: S('speak/notify: текст, можно с подстановками из события: {from} — кто написал, {text} — текст уведомления, {app} — приложение, {level} — заряд; send_message: сообщение; tap_text: надпись кнопки; shef: команда Бурмалдецу голосом (например «найди рецепт на ужин»); timer/alarm: подпись'),
+            text: S('speak/notify: текст, можно с подстановками из события: {from} — кто написал, {text} — текст уведомления, {app} — приложение, {level} — заряд; send_message: сообщение; tap_text: надпись кнопки; shef: команда Гудвину голосом (например «найди рецепт на ужин»); timer/alarm: подпись'),
             title: S('notify: заголовок'),
             seconds: N('wait/vibrate/timer: секунды'),
             percent: N('volume/brightness: 0–100'),
@@ -913,7 +914,7 @@ export const DECLS = [
   fn('report_issue', 'Записать в журнал недоработку приложения или рецепта, которую ты заметил (ошибка в рецепте, нет нужной функции, что-то не сработало).', { text: S('Что не так') }, ['text']),
 ]
 
-Object.assign(EXEC, PC_EXEC)
+Object.assign(EXEC, PC_EXEC, SUB_EXEC)
 DECLS.push(...PC_DECLS)
 
 export async function runTool(name: string, args: Obj): Promise<ToolResult> {
