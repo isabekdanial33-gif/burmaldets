@@ -120,33 +120,67 @@ export function authHeaders(id: ProviderId): Record<string, string> {
 /** Модели, которые не годятся для разговора (картинки, эмбеддинги, озвучка...). */
 const NOT_CHAT = /embed|tts|whisper|transcribe|audio|image|imagen|veo|dall-e|moderation|realtime|search|aqa|guard|rerank|ocr|computer-use|robotics|lyria|native-audio|live/i
 
-/** Список моделей прямо у провайдера по ключу — заодно это проверка ключа. */
-export async function listModels(id: ProviderId, key?: string, base?: string): Promise<{ ok: boolean; models: string[]; error?: string }> {
+export type ModelInfo = { id: string; name?: string; chat: boolean; free?: boolean; ctx?: number }
+
+/** Все модели прямо у провайдера по ключу (со всех страниц) — заодно это проверка ключа.
+ *  chat=false — модели не для разговора (голос, картинки, эмбеддинги): их показываем отдельно. */
+export async function listModels(id: ProviderId, key?: string, base?: string): Promise<{ ok: boolean; models: ModelInfo[]; error?: string }> {
   const p = provider(id)
   const k = (key ?? keyFor(id)).trim()
   const b = (base ?? baseFor(id)).replace(/\/+$/, '')
+  let headers: Record<string, string> = {}
+  if (p.kind === 'gemini') headers = { 'x-goog-api-key': k }
+  else if (p.kind === 'anthropic') headers = { 'x-api-key': k, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
+  else if (k) headers = { Authorization: 'Bearer ' + k }
+  type Raw = {
+    models?: { name: string; displayName?: string; inputTokenLimit?: number; supportedGenerationMethods?: string[] }[]
+    nextPageToken?: string
+    data?: { id: string; name?: string; display_name?: string; context_length?: number; context_window?: number; pricing?: { prompt?: string; completion?: string }; active?: boolean }[]
+    has_more?: boolean
+    last_id?: string
+  }
+  const all: ModelInfo[] = []
   try {
-    let url = b + '/models'
-    let headers: Record<string, string> = {}
-    if (p.kind === 'gemini') {
-      url += '?pageSize=1000'
-      headers = { 'x-goog-api-key': k }
-    } else if (p.kind === 'anthropic') {
-      url += '?limit=100'
-      headers = { 'x-api-key': k, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
-    } else if (k) headers = { Authorization: 'Bearer ' + k }
-    const r = await http(url, { headers }, 15000)
-    if (r.status === 401 || r.status === 403) return { ok: false, models: [], error: 'Ключ не подошёл (' + r.status + ')' }
-    if (r.status !== 200) return { ok: false, models: [], error: 'Ответ ' + r.status + ': ' + r.body.slice(0, 160) }
-    const j = JSON.parse(r.body) as { models?: { name: string; supportedGenerationMethods?: string[] }[]; data?: { id: string }[] }
-    let list: string[] = []
-    if (p.kind === 'gemini') list = (j.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent')).map((m) => m.name.replace(/^models\//, ''))
-    else list = (j.data || []).map((m) => m.id)
-    list = list.filter((m) => !NOT_CHAT.test(m))
-    // привычные сначала, остальное по алфавиту
-    const pref = p.models.filter((m) => list.includes(m))
-    return { ok: true, models: [...pref, ...list.filter((m) => !pref.includes(m)).sort()] }
+    // список моделей OpenRouter открыт всем — ключ проверяем отдельно
+    if (id === 'openrouter') {
+      const r = await http(b + '/key', { headers }, 15000)
+      if (r.status === 401 || r.status === 403) return { ok: false, models: [], error: 'Ключ не подошёл (' + r.status + ')' }
+    }
+    let page = ''
+    for (let n = 0; n < 20; n++) {
+      let url = b + '/models'
+      if (p.kind === 'gemini') url += '?pageSize=1000' + (page ? '&pageToken=' + encodeURIComponent(page) : '')
+      else if (p.kind === 'anthropic') url += '?limit=1000' + (page ? '&after_id=' + encodeURIComponent(page) : '')
+      const r = await http(url, { headers }, 15000)
+      if (r.status === 401 || r.status === 403) return { ok: false, models: [], error: 'Ключ не подошёл (' + r.status + ')' }
+      if (r.status !== 200) return { ok: false, models: [], error: 'Ответ ' + r.status + ': ' + r.body.slice(0, 160) }
+      const j = JSON.parse(r.body) as Raw
+      if (p.kind === 'gemini') {
+        for (const m of j.models || []) {
+          const mid = m.name.replace(/^models\//, '')
+          all.push({ id: mid, name: m.displayName, ctx: m.inputTokenLimit, chat: (m.supportedGenerationMethods || []).includes('generateContent') && !NOT_CHAT.test(mid) })
+        }
+        page = j.nextPageToken || ''
+      } else {
+        for (const m of j.data || []) {
+          if (m.active === false) continue
+          const free = m.pricing ? Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0 : /:free$/.test(m.id) || undefined
+          all.push({ id: m.id, name: m.display_name || m.name, ctx: m.context_length || m.context_window, chat: !NOT_CHAT.test(m.id), free })
+        }
+        page = p.kind === 'anthropic' && j.has_more && j.last_id ? j.last_id : ''
+      }
+      if (!page) break
+    }
   } catch (e) {
     return { ok: false, models: [], error: 'Нет связи: ' + String(e).slice(0, 120) }
   }
+  // без повторов; привычные сначала, остальное по алфавиту
+  const seen = new Set<string>()
+  const uniq = all.filter((m) => !seen.has(m.id) && seen.add(m.id))
+  const rank = (m: ModelInfo) => {
+    const i = p.models.indexOf(m.id)
+    return i < 0 ? 999 : i
+  }
+  uniq.sort((a, c) => rank(a) - rank(c) || a.id.localeCompare(c.id))
+  return { ok: true, models: uniq }
 }

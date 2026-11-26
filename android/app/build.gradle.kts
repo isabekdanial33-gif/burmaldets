@@ -17,8 +17,8 @@ android {
         applicationId = "com.burmaldets.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "2.1"
         // только для проверки на эмуляторе: ./gradlew assembleRelease -PwebDebug=true
         buildConfigField("boolean", "WEB_DEBUG", if (project.hasProperty("webDebug")) "true" else "false")
     }

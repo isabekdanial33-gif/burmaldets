@@ -1,6 +1,6 @@
 // Первый запуск и раздел «Мозг»: провайдер ИИ, свой ключ, модель, голос, разрешения.
-import { useEffect, useMemo, useState } from 'react'
-import { getCfg, listModels, onCfg, PROVIDERS, provider, setCfg, type ProviderId, type VoiceEngine } from './ai'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getCfg, listModels, onCfg, PROVIDERS, provider, setCfg, type ModelInfo, type ProviderId, type VoiceEngine } from './ai'
 import { isAndroid, nativeCall } from './bridge'
 import { ping } from './llm'
 import { isDesktop } from './net'
@@ -54,6 +54,7 @@ export function ProviderGrid({ value, onPick }: { value: ProviderId; onPick: (id
 }
 
 type Check = { state: 'idle' | 'busy' | 'ok' | 'bad'; msg?: string }
+const fmtCtx = (n: number) => (n >= 1e6 ? +(n / 1e6).toFixed(1) + 'M' : Math.round(n / 1000) + 'K') + ' контекст'
 
 /** Ключ + модель для выбранного провайдера. compact — внутри настроек. */
 export function BrainPanel({ compact, onReady }: { compact?: boolean; onReady?: () => void }) {
@@ -63,7 +64,9 @@ export function BrainPanel({ compact, onReady }: { compact?: boolean; onReady?: 
   const [key, setKey] = useState(cfg.keys[pid] || '')
   const [base, setBase] = useState(cfg.base || p.base)
   const [show, setShow] = useState(false)
-  const [models, setModels] = useState<string[]>([])
+  const [models, setModels] = useState<ModelInfo[]>([])
+  const [view, setView] = useState<'chat' | 'free' | 'all'>('chat')
+  const [manual, setManual] = useState(false)
   const [model, setModel] = useState(cfg.provider === pid ? cfg.model : p.models[0] || '')
   const [backup, setBackup] = useState(cfg.provider === pid ? cfg.backup[0] || '' : '')
   const [q, setQ] = useState('')
@@ -77,25 +80,40 @@ export function BrainPanel({ compact, onReady }: { compact?: boolean; onReady?: 
     setKey(getCfg().keys[id] || '')
     setBase(id === 'custom' ? getCfg().base || np.base : np.base)
     setModels([])
+    setManual(false)
+    setView('chat')
     setModel(getCfg().provider === id ? getCfg().model : np.models[0] || '')
     setBackup('')
     setChk({ state: 'idle' })
     setPong({ state: 'idle' })
   }
 
-  const load = async () => {
-    setChk({ state: 'busy', msg: 'Проверяю ключ…' })
-    const r = await listModels(pid, key, pid === 'custom' ? base : undefined)
-    if (!r.ok) return setChk({ state: 'bad', msg: r.error })
+  const seq = useRef(0)
+  const load = async (k = key) => {
+    const my = ++seq.current
+    setChk({ state: 'busy', msg: 'Проверяю ключ и загружаю модели…' })
+    const r = await listModels(pid, k, pid === 'custom' ? base : undefined)
+    if (my !== seq.current) return // уже сменили ключ или провайдера
+    if (!r.ok) return (setModels([]), setChk({ state: 'bad', msg: r.error }))
     setModels(r.models)
-    if (!r.models.includes(model)) setModel(r.models.find((m) => p.models.includes(m)) || r.models[0] || model)
-    setChk({ state: 'ok', msg: `Ключ работает · моделей: ${r.models.length}` })
+    const ids = r.models.map((m) => m.id)
+    if (!ids.includes(model)) setModel(r.models.find((m) => p.models.includes(m.id))?.id || r.models.find((m) => m.chat)?.id || r.models[0]?.id || model)
+    if (backup && !ids.includes(backup)) setBackup('')
+    const chat = r.models.filter((m) => m.chat).length
+    setChk({ state: 'ok', msg: `Ключ работает · моделей: ${r.models.length}${chat < r.models.length ? ` (для разговора — ${chat})` : ''}` })
   }
-  // ключ уже есть — список моделей загрузим сами
+  // ключ уже есть — список моделей загрузим сами; вставили новый — тоже, без кнопки
   useEffect(() => {
-    if ((key || pid === 'custom') && !models.length) void load()
+    if (key.trim() || pid === 'custom') void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid])
+  const onKey = (v: string) => {
+    setKey(v)
+    setModels([])
+    setChk({ state: 'idle' })
+    const my = ++seq.current
+    if (v.trim().length >= 20) window.setTimeout(() => my === seq.current && void load(v), 600)
+  }
 
   const save = () => {
     setCfg({ provider: pid, keys: { [pid]: key.trim() }, model: model.trim(), backup: backup.trim() ? [backup.trim()] : [], ...(pid === 'custom' ? { base: base.trim() } : {}) })
@@ -108,10 +126,17 @@ export function BrainPanel({ compact, onReady }: { compact?: boolean; onReady?: 
     if (r.ok) onReady?.()
   }
 
+  const freeN = models.filter((m) => m.free && m.chat).length
+  const chatN = models.filter((m) => m.chat).length
   const shown = useMemo(() => {
-    const l = q ? models.filter((m) => m.toLowerCase().includes(q.toLowerCase())) : models
-    return l.slice(0, 60)
-  }, [models, q])
+    let l = view === 'all' ? models : view === 'free' ? models.filter((m) => m.free && m.chat) : models.filter((m) => m.chat)
+    if (q) {
+      const w = q.toLowerCase()
+      l = l.filter((m) => m.id.toLowerCase().includes(w) || (m.name || '').toLowerCase().includes(w))
+    }
+    return l
+  }, [models, q, view])
+  const chatList = models.filter((m) => m.chat)
   const canSave = !!model.trim() && (pid === 'custom' || !!key.trim())
 
   return (
@@ -138,7 +163,7 @@ export function BrainPanel({ compact, onReady }: { compact?: boolean; onReady?: 
           <input
             type={show ? 'text' : 'password'}
             value={key}
-            onChange={(e) => (setKey(e.target.value), setChk({ state: 'idle' }))}
+            onChange={(e) => onKey(e.target.value)}
             placeholder={pid === 'gemini' ? 'AIza…' : pid === 'anthropic' ? 'sk-ant-…' : 'sk-…'}
             autoComplete="off"
             spellCheck={false}
@@ -148,7 +173,7 @@ export function BrainPanel({ compact, onReady }: { compact?: boolean; onReady?: 
           <button type="button" className="bm-iconbtn" onClick={() => setShow((s) => !s)} aria-label={show ? 'Скрыть ключ' : 'Показать ключ'}>
             <IEye size={18} />
           </button>
-          <button type="button" className="bm-btn ghost" onClick={load} disabled={chk.state === 'busy' || (!key.trim() && pid !== 'custom')}>
+          <button type="button" className="bm-btn ghost" onClick={() => load()} disabled={chk.state === 'busy' || (!key.trim() && pid !== 'custom')}>
             Проверить
           </button>
         </span>
@@ -156,32 +181,97 @@ export function BrainPanel({ compact, onReady }: { compact?: boolean; onReady?: 
       </label>
       {chk.msg && <p className={'bm-check ' + chk.state}>{chk.msg}</p>}
 
-      <label className="bm-field">
-        <span>Модель</span>
-        {models.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск модели…" className="bm-search" />}
-        {models.length ? (
-          <div className="bm-models" role="listbox" aria-label="Модели">
-            {shown.map((m) => (
-              <button key={m} role="option" aria-selected={m === model} className={'bm-model' + (m === model ? ' on' : '')} onClick={() => (setModel(m), setPong({ state: 'idle' }))}>
-                {m}
-                {p.models[0] === m && <i>рекомендую</i>}
-                {/:free$/.test(m) && <i>бесплатно</i>}
+      <div className="bm-field">
+        <span>
+          Модель
+          {models.length > 0 && (
+            <button type="button" className="bm-linkbtn" onClick={() => load()} disabled={chk.state === 'busy'}>
+              Обновить список
+            </button>
+          )}
+        </span>
+        {models.length > 0 && !manual ? (
+          <>
+            <div className="bm-mtabs" role="tablist">
+              <button type="button" role="tab" aria-selected={view === 'chat'} className={view === 'chat' ? 'on' : ''} onClick={() => setView('chat')}>
+                Для разговора <b>{chatN}</b>
               </button>
-            ))}
-          </div>
+              {freeN > 0 && (
+                <button type="button" role="tab" aria-selected={view === 'free'} className={view === 'free' ? 'on' : ''} onClick={() => setView('free')}>
+                  Бесплатные <b>{freeN}</b>
+                </button>
+              )}
+              <button type="button" role="tab" aria-selected={view === 'all'} className={view === 'all' ? 'on' : ''} onClick={() => setView('all')}>
+                Все <b>{models.length}</b>
+              </button>
+            </div>
+            {models.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по названию…" className="bm-search" spellCheck={false} autoCapitalize="off" />}
+            <div className="bm-models" role="listbox" aria-label="Модели">
+              {shown.map((m) => (
+                <button
+                  type="button"
+                  key={m.id}
+                  role="option"
+                  aria-selected={m.id === model}
+                  className={'bm-model' + (m.id === model ? ' on' : '') + (m.chat ? '' : ' dim')}
+                  onClick={() => (setModel(m.id), setPong({ state: 'idle' }))}
+                >
+                  <span className="bm-mname">
+                    {m.id}
+                    {((m.name && m.name !== m.id) || m.ctx) && (
+                      <small>{[m.name && m.name !== m.id ? m.name : '', m.ctx ? fmtCtx(m.ctx) : ''].filter(Boolean).join(' · ')}</small>
+                    )}
+                  </span>
+                  <span className="bm-mtags">
+                    {p.models[0] === m.id && <i>рекомендую</i>}
+                    {m.free && <i>бесплатно</i>}
+                    {!m.chat && <i className="x">не для разговора</i>}
+                  </span>
+                </button>
+              ))}
+              {!shown.length && <p className="bm-empty">Ничего не нашлось</p>}
+            </div>
+            <small className="bm-note">
+              Выбрана: <b>{model || '—'}</b> · показано {shown.length} из {models.length} ·{' '}
+              <button type="button" className="bm-linkbtn" onClick={() => setManual(true)}>
+                ввести вручную
+              </button>
+            </small>
+          </>
         ) : (
-          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="название модели" spellCheck={false} autoCapitalize="off" />
+          <>
+            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="название модели" spellCheck={false} autoCapitalize="off" />
+            <small className="bm-note">
+              {models.length ? (
+                <button type="button" className="bm-linkbtn" onClick={() => setManual(false)}>
+                  выбрать из списка
+                </button>
+              ) : chk.state === 'busy' ? (
+                'Загружаю список моделей…'
+              ) : (
+                'Вставьте ключ — список всех моделей появится сам.'
+              )}
+            </small>
+          </>
         )}
-      </label>
+      </div>
       {compact && (
         <label className="bm-field">
           <span>Запасная модель (если основная молчит)</span>
-          <input value={backup} onChange={(e) => setBackup(e.target.value)} placeholder={pid === 'gemini' ? 'подберу сам' : 'необязательно'} list="bm-models-dl" spellCheck={false} autoCapitalize="off" />
-          <datalist id="bm-models-dl">
-            {models.slice(0, 80).map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
+          {chatList.length ? (
+            <select value={backup} onChange={(e) => setBackup(e.target.value)} className="bm-select">
+              <option value="">{pid === 'gemini' ? 'подберу сам' : 'без запасной'}</option>
+              {chatList
+                .filter((m) => m.id !== model)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.id + (m.free ? ' — бесплатно' : '')}
+                  </option>
+                ))}
+            </select>
+          ) : (
+            <input value={backup} onChange={(e) => setBackup(e.target.value)} placeholder={pid === 'gemini' ? 'подберу сам' : 'необязательно'} spellCheck={false} autoCapitalize="off" />
+          )}
         </label>
       )}
       <div className="bm-row">

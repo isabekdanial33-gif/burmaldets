@@ -893,7 +893,8 @@
 .bm-models {
   display: flex;
   flex-direction: column;
-  max-height: 240px;
+  max-height: min(380px, 48vh);
+  overscroll-behavior: contain;
   overflow: auto;
   border-radius: 14px;
   border: 1px solid var(--bm-line);
@@ -1006,6 +1007,11 @@
   grid-template-columns: 42px 1fr 42px;
   align-items: center;
   padding: max(14px, env(safe-area-inset-top)) 16px 10px;
+  /* при прокрутке текст уходит под стекло, а не проезжает под кнопкой */
+  background: linear-gradient(180deg, rgba(5, 8, 22, 0.92), rgba(5, 8, 22, 0.7));
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border-bottom: 1px solid rgba(150, 175, 255, 0.06);
 }
 .bm-steps {
   display: flex;
@@ -1315,4 +1321,64 @@ html.bm-clear,
 html.bm-clear body,
 html.bm-clear #root {
   background: transparent !important;
+}
+
+/* выбор модели: вкладки, подписи, метки */
+.bm-mtabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bm-mtabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px !important;
+  border-radius: 999px;
+  border: 1px solid var(--bm-line2) !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+  font: 600 12.5px var(--bm-text) !important;
+  color: var(--bm-ink2, #aab4d8) !important;
+}
+.bm-mtabs button b {
+  font: 600 11px var(--bm-mono);
+  opacity: 0.7;
+}
+.bm-mtabs button.on {
+  color: #050816 !important;
+  background: var(--bm-grad) !important;
+  border-color: transparent !important;
+}
+.bm-mname {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bm-mname small {
+  font: 500 11px var(--bm-text);
+  opacity: 0.55;
+}
+.bm-mtags {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 45%;
+}
+.bm-model i.x {
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+}
+.bm-model.dim {
+  opacity: 0.6;
+}
+.bm-empty {
+  padding: 16px;
+  margin: 0;
+  text-align: center;
+  opacity: 0.6;
+  font-size: 13px;
 }
