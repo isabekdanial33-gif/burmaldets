@@ -296,11 +296,11 @@ export function VoicePanel() {
   const list = eng === 'gemini' ? GEMINI_VOICES : eng === 'openai' ? OPENAI_VOICES : eng === 'edge' ? EDGE_VOICES : []
   const [rate, setR] = useState(getRate())
   const opts: [VoiceEngine, string, boolean][] = [
-    ['auto', 'Лучший доступный', true],
-    ['gemini', 'Gemini — живой голос', !!cfg.keys.gemini],
-    ['openai', 'OpenAI — живой голос', !!cfg.keys.openai],
-    ['edge', 'Microsoft Edge — бесплатный (сервис иногда недоступен)', isDesktop],
-    ['system', 'Голос устройства', true],
+    ['auto', isDesktop ? 'Руслан — всегда один голос (рекомендую)' : 'Всегда один голос (рекомендую)', true],
+    ['gemini', 'Gemini — облачный (бывает лимит)', !!cfg.keys.gemini],
+    ['openai', 'OpenAI — облачный (платно)', !!cfg.keys.openai],
+    ['edge', 'Microsoft Edge — облачный (сервис иногда недоступен)', isDesktop],
+    ['system', isDesktop ? 'Голос Windows' : 'Голос устройства', true],
   ]
   return (
     <div className="bm-voice">
@@ -314,9 +314,9 @@ export function VoicePanel() {
           ))}
       </div>
       <p className="bm-hint">
-        Сейчас звучит: <b>{eng === 'gemini' ? 'Gemini' : eng === 'openai' ? 'OpenAI' : eng === 'edge' ? 'Edge' : 'голос устройства'}</b>
-        {eng === 'gemini' && ' — у бесплатного ключа около 10 озвучек в сутки на модель, потом голос устройства.'}
-        {!cfg.keys.gemini && !cfg.keys.openai && !isDesktop && ' — живой голос появится, если добавить ключ Gemini или OpenAI.'}
+        Сейчас звучит: <b>{eng === 'piper' ? 'Руслан (на этом компьютере, без интернета и лимитов)' : eng === 'gemini' ? 'Gemini' : eng === 'openai' ? 'OpenAI' : eng === 'edge' ? 'Edge' : 'голос устройства'}</b>
+        {(eng === 'gemini' || eng === 'openai' || eng === 'edge') && ' — облачный голос: когда кончается лимит или нет сети, ответ приходит текстом (другим голосом не подменяется).'}
+        {eng === 'system' && isAndroid && ' — всегда один и тот же; тембр — в Настройках → Телефон.'}
       </p>
       {list.length > 0 && (
         <label className="bm-field">
@@ -330,7 +330,7 @@ export function VoicePanel() {
           </select>
         </label>
       )}
-      {eng !== 'gemini' && !!cfg.keys.gemini === false && (
+      {eng !== 'gemini' && eng !== 'piper' && !isAndroid && !!cfg.keys.gemini === false && (
         <label className="bm-field">
           <span>Ключ Gemini для голоса (необязательно)</span>
           <input type="password" defaultValue={cfg.keys.gemini || ''} onBlur={(e) => setCfg({ keys: { gemini: e.target.value.trim() } })} placeholder="AIza…" autoComplete="off" spellCheck={false} />

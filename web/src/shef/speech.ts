@@ -12,6 +12,9 @@ export const level = { value: 0 }
 /** Каким голосом говорить на самом деле: «авто» — лучший из доступных по ключам. */
 export function voiceEngine(): Exclude<VoiceEngine, 'auto'> {
   const v = getCfg().voice
+  if (v === 'piper' && isDesktop) return 'piper'
+  // «авто» — голос, который есть всегда: на ПК локальный «Руслан», на телефоне голос телефона (без лимитов и пропаданий)
+  if (v === 'auto' || !v) return isDesktop ? 'piper' : isAndroid ? 'system' : keyFor('gemini') ? 'gemini' : 'system'
   if (v === 'gemini' && keyFor('gemini')) return 'gemini'
   if (v === 'openai' && keyFor('openai')) return 'openai'
   if (v === 'edge' && isDesktop) return 'edge'
@@ -233,6 +236,12 @@ if (isAndroid) onNative('tts-level', (d) => (level.value = Number(d) || 0))
 
 const ttsCache = new Map<string, Promise<Blob>>()
 const b64blob = (b: string, type: string) => new Blob([Uint8Array.from(atob(b), (c) => c.charCodeAt(0))], { type })
+/** Локальный голос «Руслан» (Piper) в приложении для ПК. */
+const piperAudio = (t: string) =>
+  (desk!.piper as (t: string) => Promise<{ b64?: string; error?: string }>)(t).then((r) => {
+    if (!r.b64) throw new Error(r.error || 'piper')
+    return b64blob(r.b64, 'audio/wav')
+  })
 const edgeAudio = (t: string, v: string) =>
   (desk!.tts as (t: string, v: string, rate: number) => Promise<{ b64?: string; error?: string }>)(t, v, 1).then((r) => {
     if (!r.b64) throw new Error(r.error || 'edge')
@@ -242,6 +251,7 @@ const engineAudio = (t: string): Promise<Blob> => {
   const e = voiceEngine()
   const v = getVoiceName()
   if (e === 'edge') return edgeAudio(t, /^ru-RU-/.test(v) ? v : 'ru-RU-DmitryNeural')
+  if (e === 'piper') return piperAudio(t)
   const p = e === 'openai' ? ttsOpenAI(t, v) : tts(t, v)
   return p
 }
@@ -318,7 +328,7 @@ async function sayInner(t: string, my: number, go: () => void): Promise<void> {
   }
   const spoken = speakable(t)
   if (voiceEngine() !== 'system') {
-    if (!navigator.onLine) {
+    if (!navigator.onLine && voiceEngine() !== 'piper') {
       go()
       return voiceDown('нет интернета — голос недоступен, отвечаю текстом')
     }
@@ -343,7 +353,7 @@ async function sayInner(t: string, my: number, go: () => void): Promise<void> {
       // другим голосом НЕ дочитываем — текст и так на экране
       go()
       const limit = e instanceof Error && /limit|429|quota/i.test(e.message + ((e as { code?: string }).code || ''))
-      return voiceDown(limit ? 'лимит облачного голоса на сегодня исчерпан — отвечаю текстом' : 'облачный голос не ответил — отвечаю текстом')
+      return voiceDown(voiceEngine() === 'piper' ? 'локальный голос не ответил — отвечаю текстом' : limit ? 'лимит облачного голоса на сегодня исчерпан — отвечаю текстом' : 'облачный голос не ответил — отвечаю текстом')
     }
   }
   go()

@@ -24,3 +24,5 @@ web/public/img/
 # модель распознавания речи (≈45 МБ) — скачивается scripts/vosk.py
 android/app/src/main/assets/vosk/
 desktop/vosk/
+# локальный голос Piper (≈90 МБ) — скачивается scripts/piper.py
+desktop/piper/

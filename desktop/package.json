@@ -1,7 +1,7 @@
 {
   "name": "burmaldets-desktop",
   "productName": "Гудвин",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Гудвин — голосовой ИИ-ассистент для Windows",
   "main": "main.js",
   "private": true,
@@ -23,6 +23,7 @@
       "pc.js",
       "hands.js",
       "accounts.js",
+      "piper.js",
       "icon.png"
     ],
     "extraResources": [
@@ -40,6 +41,10 @@
       {
         "from": "hands.cs",
         "to": "hands.cs"
+      },
+      {
+        "from": "piper",
+        "to": "piper"
       }
     ],
     "win": {

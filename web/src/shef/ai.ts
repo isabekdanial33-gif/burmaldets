@@ -54,7 +54,7 @@ export const PROVIDERS: Provider[] = [
 ]
 export const provider = (id: ProviderId) => PROVIDERS.find((p) => p.id === id) || PROVIDERS[0]
 
-export type VoiceEngine = 'auto' | 'gemini' | 'openai' | 'edge' | 'system'
+export type VoiceEngine = 'auto' | 'gemini' | 'openai' | 'edge' | 'system' | 'piper'
 export type SttEngine = 'auto' | 'system' | 'cloud' | 'vosk'
 export type Cfg = {
   provider: ProviderId

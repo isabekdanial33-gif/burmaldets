@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url')
 const pc = require('./pc')
 const { Hands } = require('./hands')
 const accounts = require('./accounts')
+const piper = require('./piper')
 const hands = new Hands()
 let phase = 'idle'
 
@@ -235,6 +236,8 @@ ipcMain.handle('bm:fetch', async (_e, url, o = {}, timeoutMs = 20000) => {
 })
 
 ipcMain.handle('bm:tts', (_e, text, voice, rate) => pc.edgeTts(text, voice, rate))
+// локальный голос «Руслан» (Piper): всегда один голос, без интернета и лимитов
+ipcMain.handle('bm:piper', (_e, text) => piper.say(text))
 
 ipcMain.handle('bm:call', async (_e, method, a = {}) => {
   switch (method) {
@@ -410,6 +413,7 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((_wc, perm) => ['media', 'clipboard-sanitized-write', 'notifications'].includes(perm))
   createPanel()
   createOrb()
+  piper.warm()
   buildTray()
   globalShortcut.register('Control+Alt+Space', summon)
   pc.restoreAlarms({ notify: (title, body) => pc.notify(title, body, summon), say: (text) => (showPanel(), emit('say', text)) })
@@ -417,4 +421,4 @@ app.whenReady().then(() => {
 })
 app.on('second-instance', () => showPanel())
 app.on('window-all-closed', (e) => e.preventDefault())
-app.on('will-quit', () => globalShortcut.unregisterAll())
+app.on('will-quit', () => (globalShortcut.unregisterAll(), piper.stop()))

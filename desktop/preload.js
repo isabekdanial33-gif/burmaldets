@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('bmDesk', {
   fetch: (url, o, timeoutMs) => ipcRenderer.invoke('bm:fetch', url, o, timeoutMs),
   call: (method, args) => ipcRenderer.invoke('bm:call', method, args),
   tts: (text, voice, rate) => ipcRenderer.invoke('bm:tts', text, voice, rate),
+  piper: (text) => ipcRenderer.invoke('bm:piper', text),
 })
 // только для шара на рабочем столе
 contextBridge.exposeInMainWorld('bmOrb', {
