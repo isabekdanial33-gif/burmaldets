@@ -11,6 +11,7 @@ import { canHear, getNight, say, setNight } from './speech'
 import { deskCall } from './tools'
 import { BrainPanel, openExternal, PermsPanel, useCfg, VoicePanel } from './Setup'
 import { IBack, IExt } from './Icons'
+import WakeTrain, { canTrain } from './WakeTrain'
 
 const REPO = 'https://github.com/isabekdanial33-gif/burmaldets'
 
@@ -73,7 +74,19 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
               placeholder="Например: отвечай с юмором, называй меня «босс», говори короче"
             />
           </label>
+          <Toggle
+            on={cfg.eco !== false}
+            onChange={(v) => setCfg({ eco: v })}
+            title="Экономный режим"
+            sub="Меньше токенов и запросов к ИИ: короче память разговора, инструменты — только нужные, экран компьютера — текстом, а не картинкой, несколько действий за один запрос."
+          />
         </Sec>
+
+        {isDesktop && (
+          <Sec id="acc" title="Аккаунты" sub="вход на сайты без пароля вслух" open={open} onOpen={setOpen}>
+            <Accounts />
+          </Sec>
+        )}
 
         <Sec id="voice" title="Голос" sub="тембр, скорость, ночной режим" open={open} onOpen={setOpen}>
           <VoicePanel />
@@ -86,6 +99,7 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
             <Toggle on={wakeOn} onChange={setWakeOn} title="Слушать имя" sub={isDesktop ? 'Скажите «Бурмалдец» или «Чекунец» — распознаётся прямо на компьютере' : 'Пока открыта эта вкладка'} />
           )}
           {isDesktop && <DesktopWake />}
+          {canTrain && <WakeTrain />}
         </Sec>
 
         {isAndroid && (
@@ -149,6 +163,51 @@ export default function Settings({ onClose, wakeOn, setWakeOn, pyramid, setPyram
           Готово
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Сохранённые аккаунты (как в Джарвисе): шифруются Windows, модель видит только названия. */
+function Accounts() {
+  const [list, setList] = useState<{ id: string; name: string; site: string }[]>([])
+  const [f, setF] = useState({ name: '', site: '', login: '', password: '' })
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    void deskCall('accList', {}).then((r) => setList((r.list as typeof list) || []))
+  }, [])
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const r = await deskCall('accAdd', f)
+    if (!r.ok) return setMsg(String(r.error || 'Не сохранилось'))
+    setList(r.list as typeof list)
+    setF({ name: '', site: '', login: '', password: '' })
+    setMsg('Сохранено и зашифровано.')
+  }
+  return (
+    <div className="bm-acc">
+      <p className="bm-hint">
+        Скажите «зайди в мой ВК» — Бурмалдец откроет страницу входа и после вашего «да» сам введёт логин и пароль. Они шифруются средствами Windows и хранятся только на этом
+        компьютере; ИИ их не видит и не произносит.
+      </p>
+      {list.map((a) => (
+        <div key={a.id} className="bm-acc-row">
+          <span>
+            <b>{a.name}</b>
+            {a.site && <small>{a.site}</small>}
+          </span>
+          <button type="button" className="bm-chip" onClick={() => deskCall('accRemove', { id: a.id }).then((r) => setList(r.list as typeof list))}>
+            Удалить
+          </button>
+        </div>
+      ))}
+      <form className="bm-acc-form" onSubmit={add} autoComplete="off">
+        <input placeholder="Название: ВКонтакте" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />
+        <input placeholder="Сайт: vk.com (необязательно)" value={f.site} onChange={(e) => setF({ ...f, site: e.target.value })} />
+        <input placeholder="Логин, почта или телефон" value={f.login} onChange={(e) => setF({ ...f, login: e.target.value })} required autoComplete="off" />
+        <input type="password" placeholder="Пароль" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required autoComplete="new-password" />
+        <button className="bm-btn">Сохранить аккаунт</button>
+      </form>
+      {msg && <small className="bm-note">{msg}</small>}
     </div>
   )
 }

@@ -39,7 +39,45 @@ class WakeService : Service(), RecognitionListener {
          * «Бурмалдец» и «Чекунец» — придуманные слова, в словаре Vosk их нет. Проверено на записях:
          * Vosk слышит их как «бур молодец» и «чеку нет». Обычная речь («молодец», «чек у нас», «конец») не будит.
          */
-        val WAKE = Regex("""(?:^|\s)(?:(?:бур|бор|бура|бурма|бурный)\s+(?:молодец|малец|мальца|молодца|молодцы)|(?:чеку|чику|чека|чекан)\s+(?:нет|нец|конец|нету)|бурмалд\S*|чекун\S*)(?=\s|$)""")
+        val WAKE = Regex("""(?:^|\s)(?:(?:бур|бор|бура|бурма|бурмал|бурный|бурно)\s+(?:молодец|малец|мальца|молодца|молодцы|отец|дец)|(?:чеку|чику|чека|чекан)\s+(?:нет|нец|конец|нету|отец)|чек\s+отец|бурмалд\S*|чекун\S*)(?=\s|$)""")
+
+        /** Как Vosk слышит имя голосом хозяина (из обучения в приложении): «отец», «бурма отец»... */
+        @Volatile var extra: List<String> = emptyList()
+        private val NON_LETTER = Regex("""[^\p{L}\p{N}\s]""")
+        private val SPACES = Regex("""\s+""")
+        fun norm(t: String) = t.lowercase().replace('ё', 'е').replace(NON_LETTER, " ").replace(SPACES, " ").trim()
+
+        fun loadExtra(ctx: Context) {
+            val raw = ctx.getSharedPreferences("shef", Context.MODE_PRIVATE).getString("wakeExtra", "[]") ?: "[]"
+            extra = try {
+                val a = org.json.JSONArray(raw)
+                (0 until a.length()).map { norm(a.optString(it)) }.filter { it.isNotEmpty() }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        /**
+         * Услышали имя? final — законченная реплика (после паузы). Выученная фраза в одно слово (например «отец») —
+         * обычное слово, поэтому будит, только если сказана отдельной репликой («Отец!») или обращением с паузой («Отец, … »).
+         */
+        fun heardName(text: String, final: Boolean, words: org.json.JSONArray? = null): Boolean {
+            val t = norm(text)
+            if (t.isEmpty()) return false
+            if (WAKE.containsMatchIn(t)) return true
+            for (p in extra) {
+                if (!p.contains(' ')) {
+                    if (final && t == p) return true
+                    // «Отец, включи музыку»: слово первым и после него пауза-запятая (в обычной речи паузы между словами короче)
+                    if (final && words != null && words.length() > 1) {
+                        val w0 = words.optJSONObject(0)
+                        val w1 = words.optJSONObject(1)
+                        if (w0 != null && w1 != null && norm(w0.optString("word")) == p && w1.optDouble("start") - w0.optDouble("end") >= 0.18) return true
+                    }
+                } else if (" $t ".contains(" $p ")) return true
+            }
+            return false
+        }
 
 
         @Volatile var instance: WakeService? = null
@@ -184,6 +222,7 @@ class WakeService : Service(), RecognitionListener {
 
     override fun onCreate() {
         super.onCreate()
+        loadExtra(this)
         instance = this
         channels(this)
         val note = note()
@@ -315,7 +354,7 @@ class WakeService : Service(), RecognitionListener {
             return
         }
         val p = JSONObject(hypothesis ?: "{}").optString("partial")
-        if (WAKE.containsMatchIn(p)) wake()
+        if (heardName(p, false)) wake()
     }
 
     override fun onResult(hypothesis: String?) {
@@ -326,7 +365,7 @@ class WakeService : Service(), RecognitionListener {
             if (t.isNotBlank()) finishOnce(t)
             return
         }
-        if (WAKE.containsMatchIn(j.optString("text"))) wake()
+        if (heardName(j.optString("text"), true, j.optJSONArray("result"))) wake()
     }
 
     override fun onFinalResult(hypothesis: String?) {

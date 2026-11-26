@@ -3,6 +3,7 @@ import { getState } from '../store'
 import { platform } from './bridge'
 import { getCfg } from './ai'
 import { isDesktop } from './net'
+import { pcActiveAt } from './pctools'
 import { fallback, quick as quickRaw, rememberFound, rememberSaid, type Emotion, type Reply } from './brain'
 import { chat, LlmError, type Content, type Part } from './llm'
 import { shefLog } from './log'
@@ -43,7 +44,26 @@ const COOK_TOOLS = new Set([
   'search_recipes', 'get_recipe', 'start_cooking', 'cooking_step', 'cooking_finish', 'cart_add_recipe_ingredients',
   'fridge_list', 'fridge_add', 'fridge_remove', 'fridge_check', 'recipes_from_fridge', 'favorites_add', 'favorites_list', 'open_page',
 ])
-const toolsFor = (m: Mode) => DECLS.filter((d) => m === 'cook' || !COOK_TOOLS.has(d.name))
+// Только то, что работает на этом устройстве: на компьютере не шлём телефонные инструменты, на телефоне — компьютерные.
+// Это и честнее, и заметно дешевле: описания инструментов уходят в каждом запросе.
+const PHONE_ONLY = new Set([
+  'read_notifications', 'set_brightness', 'do_not_disturb', 'recent_calls', 'birthdays', 'calendar_events', 'add_calendar_event',
+  'call_contact', 'find_contacts', 'screen_read', 'screen_tap', 'screen_long_tap', 'screen_type', 'screen_scroll', 'phone_action',
+  'enable_screen_control', 'send_message', 'ringer_mode', 'create_macro', 'list_macros', 'delete_macro', 'toggle_macro', 'run_macro',
+  'grant_permission', 'set_wallpaper', 'list_ringtones', 'set_ringtone', 'flashlight',
+])
+const PC_TOOLS = new Set(['pc_look', 'pc_act', 'pc_accounts', 'pc_login'])
+/** В экономном режиме руки ПК показываем модели, только когда речь про экран и программы или работа с ними уже идёт. */
+const PC_HINT =
+  /экран|окн[оаеу]|нажм|нажать|клик|щ[её]лкн|курсор|мыш|напечат|введи|впиши|набери|открой|запусти|закрой|сверни|разверни|перейди|зайди|войди|залогин|вкладк|браузер|сайт|программ|приложени|папк|файл|скопируй|вставь|выдели|прокрут|листай|кнопк|меню|аккаунт|chrome|хром|youtube|ютуб|телеграм|telegram|discord|steam|word|excel|блокнот|проводник|рабоч\S* стол/i
+const eco = () => getCfg().eco !== false
+const toolsFor = (m: Mode, text = '') =>
+  DECLS.filter((d) => {
+    if (m !== 'cook' && COOK_TOOLS.has(d.name)) return false
+    if (isDesktop && PHONE_ONLY.has(d.name)) return false
+    if (PC_TOOLS.has(d.name)) return isDesktop && (!eco() || PC_HINT.test(text) || Date.now() - pcActiveAt < 10 * 60000)
+    return true
+  })
 
 function system(): string {
   const st = getState()
@@ -101,7 +121,14 @@ function system(): string {
     `В списке покупок: ${st.shop.filter((x) => !x.done).length} поз.`,
     facts.length ? 'Что ты знаешь о пользователе:\n' + facts.map((f) => '- ' + f).join('\n') : 'О пользователе пока ничего не запомнено.',
   ]
-  return [...base, ...(mode === 'cook' ? cook : []), ...ctx].join('\n')
+  // на компьютере — свои правила: телефонных разделов модель не видит, зато знает, как работать мышью
+  const PHONE_LINES = /^(УВЕДОМЛЕНИЯ|ЗВОНКИ В ЖУРНАЛЕ|ДНИ РОЖДЕНИЯ|КАЛЕНДАРЬ|УПРАВЛЕНИЕ ТЕЛЕФОНОМ|СЦЕНАРИИ|ЭКРАН:|Если screen_|ЗВОНКИ:)/
+  const pc = [
+    'УПРАВЛЕНИЕ КОМПЬЮТЕРОМ: ты работаешь мышью и клавиатурой как человек. Порядок: pc_look (элементы окна списком с номерами) → pc_act с НЕСКОЛЬКИМИ шагами сразу (например: щёлкнуть в поле поиска, напечатать, Enter) → смотри вернувшийся список и продолжай, пока задача не сделана. ЭКОНОМЬ: после pc_act не вызывай pc_look — свежий список уже вернулся; image: true — только если без картинки никак (игры, картинки, холсты). Программу или сайт быстрее открыть через open_app или web_search, чем мышью; горячие клавиши (ctrl+l, ctrl+t, alt+tab, win) часто быстрее кликов. Действуй только в окне из pc_look. Если вернулось «впереди другое окно» или «Вы взяли мышь» — остановись и коротко скажи. Пароли вводит только pc_login из сохранённых аккаунтов, сам ты их не печатаешь.',
+    'ЭКРАН: «что у меня на экране», «прочитай это», «о чём статья» — pc_look (с image: true, если важна картинка) и коротко перескажи суть.',
+  ]
+  const all = isDesktop ? [...base.filter((l) => !PHONE_LINES.test(l)), ...pc] : base
+  return [...all, ...(mode === 'cook' ? cook : []), ...ctx].join('\n')
 }
 
 /** Упорядочить найденные рецепты так, как модель их назвала в ответе (по первым значимым словам названия). */
@@ -151,13 +178,20 @@ function parseReply(t: string): Reply {
 
 /** Держим историю короткой, но начинаем всегда с обычной реплики пользователя (не с ответа инструмента). */
 function trim() {
-  while (history.length > 24) {
+  while (history.length > (eco() ? 14 : 24)) {
     history.shift()
     while (history.length && !(history[0].role === 'user' && history[0].parts.some((p) => p.text))) history.shift()
   }
 }
 
 export type AskOpts = { image?: string; onThinking?: () => void }
+
+/** «Стоп»: текущий ответ бросаем — даже если модель или инструмент ещё работают, их результат уже не нужен. */
+let epoch = 0
+class Halt extends Error {}
+export function stopAsk() {
+  epoch++
+}
 
 export async function ask(text: string, opts: AskOpts = {}): Promise<Reply> {
   const r = await askInner(text, opts)
@@ -203,6 +237,10 @@ async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
     }
   }
   opts.onThinking?.()
+  const my = epoch
+  const halted = () => {
+    if (my !== epoch) throw new Halt()
+  }
   const parts: Part[] = [{ text: text || 'Что на фото?' }]
   if (opts.image) parts.push({ inlineData: { mimeType: 'image/jpeg', data: opts.image } })
   const start = history.length
@@ -218,9 +256,10 @@ async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
       const { content } = await chat({
         systemInstruction: { parts: [{ text: system() }] },
         contents: history,
-        tools: [{ functionDeclarations: toolsFor(getMode()) }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 900 },
+        tools: [{ functionDeclarations: toolsFor(getMode(), text) }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: eco() ? 700 : 900 },
       })
+      halted()
       history.push(content)
       const calls = content.parts.filter((p) => p.functionCall)
       if (!calls.length) {
@@ -250,8 +289,10 @@ async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
       const extra: Part[] = []
       for (const c of calls) {
         // действия на экране идут шагами — даём им больше времени
-        if (/^(screen_|phone_action|open_app|send_message|navigate|open_settings|create_macro)/.test(c.functionCall!.name)) deadline = Math.max(deadline, Date.now() + 45000)
+        if (/^(screen_|pc_|phone_action|open_app|send_message|navigate|open_settings|create_macro)/.test(c.functionCall!.name)) deadline = Math.max(deadline, Date.now() + 45000)
+        halted()
         const r = await runTool(c.functionCall!.name, c.functionCall!.args || {})
+        halted()
         const res = r.result as Record<string, unknown>
         // запоминаем найденное — чтобы «готовим второй» работало и локально
         if (Array.isArray(res.recipes)) {
@@ -273,6 +314,7 @@ async function askInner(text: string, opts: AskOpts = {}): Promise<Reply> {
     return { text: 'Запутался в шагах. Давайте ещё раз, попроще?', emotion: 'грусть' }
   } catch (e) {
     history.splice(start)
+    if (e instanceof Halt) return { text: '', emotion: 'спокойно', stopped: true }
     const code = e instanceof LlmError ? e.code : 'busy'
     if (code !== 'offline' && code !== 'no_key') shefLog('ошибка', `ИИ: ${code} ${e instanceof Error ? e.message.slice(0, 200) : ''}`)
     if (opts.image) return { text: code === 'limit' ? 'Лимит ИИ на сегодня исчерпан, фото посмотреть не могу.' : CFG_HINT[code] || 'Не получилось посмотреть фото — нет связи с ИИ.', emotion: 'грусть' }

@@ -8,6 +8,7 @@ import { EDGE_VOICES, GEMINI_VOICES, OPENAI_VOICES, getRate, getVoiceName, say, 
 import { deskCall } from './tools'
 import { IBack, ICheck, IExt, IEye } from './Icons'
 import Holo from './Holo'
+import WakeTrain, { canTrain } from './WakeTrain'
 
 export function openExternal(url: string) {
   if (isAndroid) nativeCall('openUrl', { url }, 5000).catch(() => {})
@@ -392,7 +393,7 @@ export function PermsPanel() {
 export default function Onboarding({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0)
   const cfg = useCfg()
-  const steps = ['hello', 'brain', 'voice', ...(isAndroid ? ['perms'] : []), 'done']
+  const steps = ['hello', 'brain', 'voice', ...(isAndroid ? ['perms'] : []), ...(canTrain ? ['name'] : []), 'done']
   const cur = steps[step]
   const next = () => setStep((s) => Math.min(steps.length - 1, s + 1))
   const back = () => setStep((s) => Math.max(0, s - 1))
@@ -479,6 +480,23 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           <div className="bm-onb-foot">
             <button className="bm-btn big" onClick={next}>
               Дальше
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cur === 'name' && (
+        <div className="bm-onb-body">
+          <p className="bm-kicker">ШАГ {step} · ИМЯ</p>
+          <h2 className="bm-h2">Научите меня узнавать ваш голос</h2>
+          <p className="bm-hint">Так я буду откликаться на «Бурмалдец» и «Чекунец» именно у вас — займёт полминуты.</p>
+          <WakeTrain />
+          <div className="bm-onb-foot">
+            <button className="bm-btn big" onClick={next}>
+              Дальше
+            </button>
+            <button className="bm-linkbtn" onClick={next}>
+              Пропустить — сделаю потом в настройках
             </button>
           </div>
         </div>

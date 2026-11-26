@@ -18,7 +18,7 @@ let stopwatch = 0
 export const rememberSaid = (t: string) => (lastSaid = t)
 
 export type Emotion = 'спокойно' | 'радость' | 'думаю' | 'удивление' | 'грусть' | 'слушаю' | 'гордость'
-export type Reply = { text: string; emotion: Emotion }
+export type Reply = { text: string; emotion: Emotion; /** Остановлено кнопкой «Стоп» — ответа нет. */ stopped?: boolean }
 
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]
 const norm = (s: string) =>

@@ -21,6 +21,8 @@
       "preload.js",
       "orb.html",
       "pc.js",
+      "hands.js",
+      "accounts.js",
       "icon.png"
     ],
     "extraResources": [
@@ -34,6 +36,10 @@
       {
         "from": "vosk",
         "to": "vosk"
+      },
+      {
+        "from": "hands.cs",
+        "to": "hands.cs"
       }
     ],
     "win": {

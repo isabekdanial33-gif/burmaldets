@@ -1,8 +1,10 @@
 // Экран Бурмалдеца. Три вида: весь экран (приложение), «шторка» поверх других приложений (телефон, плавающая кнопка
 // или слово-активатор) и панель рядом с шаром на рабочем столе (компьютер).
+import { afterWake, wakeEnd } from './wake'
+import { syncWakeExtra } from './WakeTrain'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { go } from '../ui'
-import { ask } from './agent'
+import { ask, stopAsk } from './agent'
 import type { Emotion } from './brain'
 import Holo, { type Phase } from './Holo'
 import Pyramid from './Pyramid'
@@ -31,6 +33,11 @@ const photoPrompt = () =>
     : 'Что на этом фото? Коротко опиши главное. Если там текст — прочитай или переведи его.'
 
 const ONLY_NAME = /^(?:эй|ну|алло|слышь)?[\s,]*(?:бур\s*м[оа]л\S*|бурм[оа]лд\S*|бур молодец|чекун\S*|чеку нет)[\s.!?,]*$/i
+/** Имя голосом хозяина (из обучения, например «отец») без команды. */
+const onlyName = (q: string) => {
+  const e = wakeEnd(q)
+  return e >= 0 && !afterWake(q, e).replace(/^(?:эй|ну|алло|слышь)\s*/, '')
+}
 const GREET = ['Слушаю.', 'Да, слушаю.', 'Да-да, я здесь.', 'Я тут.']
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]
 let lastTalk = 0
@@ -92,6 +99,15 @@ function Assistant() {
   // на компьютере слушаем имя по умолчанию (в приложении), в браузере — по галочке
   const [wakeOn, setWakeOn] = useState(() => !isAndroid && canHear && (localStorage.getItem(WAKE_KEY) ?? (isDesktop ? '1' : '0')) === '1')
   const busy = useRef(false)
+  /** Нажали «Стоп»: разговор обрывается, ничего не говорим и не слушаем дальше. */
+  const halt = useRef(false)
+  /** Что сейчас делает на компьютере («Нажимаю «Сохранить»») — видно под шаром. */
+  const [act, setAct] = useState('')
+  useEffect(() => {
+    const f = (e: Event) => setAct(String((e as CustomEvent).detail || ''))
+    window.addEventListener('bm:act', f)
+    return () => window.removeEventListener('bm:act', f)
+  }, [])
   const queued = useRef<{ q?: string; image?: string } | null>(null)
   const alive = useRef(true)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -126,6 +142,7 @@ function Assistant() {
         return
       }
       busy.current = true
+      halt.current = false
       stopWake()
       setLink(null)
       ui.link = null
@@ -145,6 +162,7 @@ function Assistant() {
               await chime()
               if (!alive.current) return
               h = await listen(setHeard)
+              if (halt.current) return
               if (queued.current) break
               if (!h.text && h.how !== 'cancel') shefLog('не расслышал', h.how || 'тишина')
             }
@@ -155,7 +173,7 @@ function Assistant() {
               if (q === undefined && !image) continue
             } else q = h.text
             // сказали только имя («Бурмалдец!») — значит, ждут, что слушаю: слушаем дальше, без ответа
-            if (q && ONLY_NAME.test(q.trim()) && turn < 28) {
+            if (q && (ONLY_NAME.test(q.trim()) || onlyName(q)) && turn < 28) {
               q = undefined
               continue
             }
@@ -176,6 +194,10 @@ function Assistant() {
           lastTalk = Date.now()
           image = undefined
           if (!alive.current) return
+          if (halt.current || r.stopped) {
+            setReply('')
+            return
+          }
           if (r.text) {
             const c = ui.card
             ui.card = null
@@ -186,7 +208,7 @@ function Assistant() {
               setPhase('speak')
             })
           } else setReply('')
-          if (!alive.current) return
+          if (!alive.current || halt.current) return
           if (ui.nav) {
             const to = ui.nav
             ui.nav = null
@@ -229,6 +251,7 @@ function Assistant() {
       onNative('layout', (d) => setLayout(isDesktop ? 'panel' : (d as { sheet?: boolean } | null)?.sheet ? 'sheet' : 'full')),
       onNative('back', () => (layoutRef.current === 'sheet' ? closeSheet() : close())),
       onNative('command', (d) => converse(String(d || ''))),
+      onNative('stop', () => stopAll()),
       // напоминание или таймер на компьютере: просто сказать вслух
       onNative('say', (d) => {
         const t = String(d || '')
@@ -254,6 +277,7 @@ function Assistant() {
         }, 90000)
       })
     if (isAndroid) {
+      syncWakeExtra()
       nativeCall<{ wake?: boolean; cmd?: string | null; say?: string | null; sheet?: boolean }>('ready', {}, 5000)
         .then((r) => {
           if (r.sheet) setLayout('sheet')
@@ -286,10 +310,17 @@ function Assistant() {
     if (isDesktop) void deskCall('phase', { phase })
   }, [phase])
 
+  // после обучения голосу слух перезапускается (оно забирало микрофон)
+  const [rewake, setRewake] = useState(0)
+  useEffect(() => {
+    const f = () => setRewake((n) => n + 1)
+    window.addEventListener('bm:rewake', f)
+    return () => window.removeEventListener('bm:rewake', f)
+  }, [])
   useEffect(() => {
     if (!isAndroid && wakeOn && (phase === 'sleep' || phase === 'idle') && !busy.current) startWake((rest) => converse(rest || undefined))
     if (!wakeOn) stopWake()
-  }, [phase, wakeOn, converse])
+  }, [phase, wakeOn, converse, rewake])
 
   const close = () => {
     alive.current = false
@@ -302,20 +333,32 @@ function Assistant() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || settings || help) return
+      if (busy.current) return stopAll()
       if (layoutRef.current !== 'full') closeSheet()
     }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   })
 
+  /** «Стоп»: замолчать, бросить ответ и остановить действия на компьютере. */
+  function stopAll() {
+    halt.current = true
+    queued.current = null
+    stopAsk()
+    stopSpeaking()
+    cancelListen()
+    if (isDesktop) void deskCall('pcStop', {})
+    setAct('')
+    setReply('')
+    setHeard('')
+    setPhase(isAndroid || wakeOn ? 'sleep' : 'idle')
+  }
+
   const tapOrb = () => {
     unlockAudio()
     touch()
     setPoke((p) => p + 1)
-    if (busy.current) {
-      stopSpeaking()
-      return
-    }
+    if (busy.current) return stopAll()
     converse()
   }
 
@@ -354,7 +397,7 @@ function Assistant() {
   }
 
   const status =
-    phase === 'listen' ? 'Слушаю…' : phase === 'think' ? 'Думаю…' : phase === 'speak' ? '' : isAndroid || wakeOn ? 'Скажите «Бурмалдец» или «Чекунец»' : 'Нажмите на шар и говорите'
+    phase === 'listen' ? 'Слушаю…' : phase === 'think' ? act || 'Думаю…' : phase === 'speak' ? '' : isAndroid || wakeOn ? 'Скажите «Бурмалдец» или «Чекунец»' : 'Нажмите на шар и говорите'
 
   const setPyr = (on: boolean) => {
     setPyramid(on)
@@ -458,11 +501,20 @@ function Assistant() {
           </button>
           {typing ? (
             <form className="bm-form" onSubmit={sendText}>
+              {(phase === 'think' || phase === 'speak') && (
+                <button type="button" className="bm-stop-s" onClick={stopAll} aria-label="Стоп" title="Остановить ответ (Esc)">
+                  <i aria-hidden />
+                </button>
+              )}
               <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Напишите Бурмалдецу…" aria-label="Сообщение" autoFocus={!isAndroid} />
               <button className="bm-send" aria-label="Отправить">
                 <ISend size={18} />
               </button>
             </form>
+          ) : phase === 'think' || phase === 'speak' ? (
+            <button className="bm-mic bm-stop" onClick={stopAll} aria-label="Стоп" title="Остановить ответ (Esc)">
+              <i aria-hidden />
+            </button>
           ) : (
             <button className={'bm-mic' + (phase === 'listen' ? ' on' : '')} onClick={tapOrb} aria-label="Говорить">
               <IMic size={26} />

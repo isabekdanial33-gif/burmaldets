@@ -5,7 +5,13 @@ const path = require('node:path')
 const fs = require('node:fs')
 const { pathToFileURL } = require('node:url')
 const pc = require('./pc')
+const { Hands } = require('./hands')
+const accounts = require('./accounts')
+const hands = new Hands()
+let phase = 'idle'
 
+// проверка рядом с установленной копией: BM_PROFILE=папка — свой профиль и своя блокировка второго запуска
+if (process.env.BM_PROFILE) app.setPath('userData', process.env.BM_PROFILE)
 if (!app.requestSingleInstanceLock()) app.quit()
 app.setAppUserModelId('com.burmaldets.desktop')
 // звук и распознавание в фоне не должны «засыпать»
@@ -111,11 +117,45 @@ function hidePanel() {
 function emit(name, data) {
   panel?.webContents.executeJavaScript(`window.__shefEvent&&window.__shefEvent(${JSON.stringify(name)},${JSON.stringify(JSON.stringify(data ?? null))})`).catch(() => {})
 }
-/** Позвали (шар, горячая клавиша, трей): показать панель и сразу слушать. */
+/** Позвали (шар, горячая клавиша, трей): показать панель и сразу слушать. Если он занят делом — это «Стоп». */
 function summon() {
+  if (phase === 'think' || phase === 'speak' || acting) {
+    hands.stop()
+    showPanel()
+    emit('stop')
+    return
+  }
   showPanel()
   emit('wake', { sheet: false })
 }
+
+/** Пока Бурмалдец работает мышью, панель прозрачна и пропускает клики — чтобы не закрывать окно, в котором он работает. */
+let acting = false
+function ghost(on) {
+  acting = on
+  if (!panel) return
+  panel.setOpacity(on ? 0 : 1)
+  panel.setIgnoreMouseEvents(on)
+  orb?.webContents.send('bm:phase', on ? 'act' : phase)
+}
+const say = (t) => panel?.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('bm:act',{detail:${JSON.stringify(t)}}))`).catch(() => {})
+const stepText = (s) => {
+  const d = String(s.do || '')
+  const el = s.el ?? s.i
+  const it = el !== undefined ? hands.items[Number(el) - 1] : null
+  const what = it ? ` «${String(it.name).slice(0, 40)}»` : ''
+  return (
+    { click: 'Нажимаю', left_click: 'Нажимаю', right_click: 'Правая кнопка', double_click: 'Двойной щелчок', type: 'Печатаю', keys: 'Клавиши', scroll: 'Листаю', drag: 'Перетаскиваю', move: 'Веду курсор', focus: 'Переключаю окно', wait: 'Жду' }[d] || 'Делаю'
+  ) + what
+}
+const itemsText = (look) =>
+  look.items
+    .map((it) => {
+      const f = it.flags
+      const tags = [f.includes('f') && 'фокус', f.includes('p') && 'пароль', f.includes('d') && 'выключено', f.includes('on') && 'вкл'].filter(Boolean)
+      return `${it.i} ${it.kind}${it.name ? ' «' + it.name + '»' : ''}${tags.length ? ' [' + tags.join(', ') + ']' : ''}`
+    })
+    .join('\n')
 
 function createOrb() {
   const d = screen.getPrimaryDisplay().workArea
@@ -203,8 +243,104 @@ ipcMain.handle('bm:call', async (_e, method, a = {}) => {
       hidePanel()
       return { ok: true }
     case 'phase':
-      orb?.webContents.send('bm:phase', a.phase)
+      phase = a.phase
+      if (!acting) orb?.webContents.send('bm:phase', a.phase)
       return { ok: true }
+    // ---------- руки: смотреть и действовать мышью и клавиатурой ----------
+    case 'pcLook': {
+      try {
+        let hwnd = 0
+        if (a.window) {
+          const wins = await hands.windows()
+          const q = String(a.window).toLowerCase()
+          hwnd = (/^\d+$/.test(q) ? wins[Number(q) - 1] : wins.find((w) => w.title.toLowerCase().includes(q)))?.hwnd || 0
+        }
+        const look = await hands.look({ hwnd, max: a.max })
+        const out = { ok: true, window: look.window, windows: look.windows.slice(0, 12).map((w, i) => `${i + 1}. ${w.title}${w.minimized ? ' (свёрнуто)' : ''}`).join('\n'), items: itemsText(look), boxes: look.items }
+        if (a.image) {
+          const vis = panel?.isVisible() && !acting
+          if (vis) panel.setOpacity(0)
+          await new Promise((r) => setTimeout(r, 160))
+          try {
+            Object.assign(out, await hands.screenshot())
+          } finally {
+            if (vis) panel.setOpacity(1)
+          }
+        }
+        return out
+      } catch (e) {
+        return { ok: false, error: String(e.message || e) }
+      }
+    }
+    case 'pcAct': {
+      const steps = Array.isArray(a.steps) ? a.steps : []
+      if (!steps.length) return { ok: false, error: 'нет действий' }
+      ghost(true)
+      try {
+        const r = await hands.act(steps, (s) => say(stepText(s)))
+        if (a.look !== false && !r.stopped) {
+          await new Promise((res) => setTimeout(res, Math.max(250, Math.min(3000, Number(a.settle_ms) || 450))))
+          const look = await hands.look({ hwnd: hands.hwnd })
+          Object.assign(r, { window: look.window, items: itemsText(look), boxes: look.items })
+        }
+        return r
+      } catch (e) {
+        return { ok: false, error: String(e.message || e) }
+      } finally {
+        ghost(false)
+        say('')
+      }
+    }
+    case 'pcStop':
+      hands.stop()
+      ghost(false)
+      return { ok: true }
+    // ---------- аккаунты: секреты не покидают главный процесс ----------
+    case 'accList':
+      return { ok: true, list: accounts.list() }
+    case 'accAdd':
+      try {
+        return { ok: true, list: accounts.add(a) }
+      } catch (e) {
+        return { ok: false, error: String(e.message || e) }
+      }
+    case 'accRemove':
+      return { ok: true, list: accounts.remove(String(a.id || '')) }
+    case 'pcLogin': {
+      if (process.env.BM_NO_INPUT) return { ok: false, error: 'ввод выключен (тест)' }
+      const acc = accounts.find(a.account)
+      if (!acc) return { ok: false, error: 'нет такого сохранённого аккаунта', saved: accounts.list().map((x) => x.name) }
+      const sec = accounts.secrets(acc)
+      ghost(true)
+      try {
+        // поле логина: по номеру или то, где уже стоит курсор; всё — только в том окне, которое видели
+        if (a.login_el) {
+          const r1 = await hands.act([{ do: 'click', el: a.login_el }])
+          if (!r1.ok) return r1
+        }
+        await hands.guardWindow()
+        await hands.cmd('combo', { vks: [0x11, 0x41] })
+        await hands.cmd('type', { text: sec.login, cps: 30 })
+        if (a.password_el) {
+          const r2 = await hands.act([{ do: 'click', el: a.password_el }])
+          if (!r2.ok) return { ok: false, error: r2.error }
+        } else {
+          await hands.guardWindow()
+          await hands.cmd('combo', { vks: [0x09] })
+        }
+        await new Promise((r) => setTimeout(r, 150))
+        await hands.guardWindow()
+        await hands.cmd('type', { text: sec.password, cps: 30 })
+        if (a.submit) await hands.cmd('combo', { vks: [0x0d] })
+        await new Promise((r) => setTimeout(r, 900))
+        const look = await hands.look({ hwnd: hands.hwnd })
+        return { ok: true, account: acc.name, submitted: !!a.submit, window: look.window, items: itemsText(look), boxes: look.items }
+      } catch (e) {
+        return { ok: false, error: String(e.message || e) }
+      } finally {
+        ghost(false)
+      }
+    }
     case 'prefs':
       if (typeof a.orb === 'boolean') setOrb(a.orb)
       if (typeof a.autostart === 'boolean') app.setLoginItemSettings({ openAtLogin: a.autostart })

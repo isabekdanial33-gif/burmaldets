@@ -1382,3 +1382,176 @@ html.bm-clear #root {
   opacity: 0.6;
   font-size: 13px;
 }
+
+/* обучение имени под голос */
+.bm-train {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--bm-line);
+  background: rgba(0, 0, 0, 0.22);
+  text-align: left;
+}
+.bm-train-h {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bm-train-h small {
+  opacity: 0.7;
+  line-height: 1.45;
+}
+.bm-train .bm-btn {
+  align-self: flex-start;
+}
+.bm-train-now {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 12px;
+  border-radius: 16px;
+  background: rgba(60, 231, 255, 0.08);
+  border: 1px solid rgba(60, 231, 255, 0.35);
+  font-size: 15px;
+  text-align: center;
+}
+.bm-train-now span {
+  font: 600 11px var(--bm-mono);
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
+.bm-train-now b {
+  font: 700 26px var(--bm-display, inherit);
+  background: var(--bm-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.bm-train-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff4f6d;
+  box-shadow: 0 0 0 0 rgba(255, 79, 109, 0.6);
+  animation: bm-rec 1.2s infinite;
+}
+@keyframes bm-rec {
+  70% {
+    box-shadow: 0 0 0 12px rgba(255, 79, 109, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 79, 109, 0);
+  }
+}
+.bm-train-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.bm-train-log code {
+  font: 600 12.5px var(--bm-mono);
+  color: var(--bm-c1);
+}
+.bm-train-log em {
+  font-style: normal;
+  opacity: 0.6;
+}
+.bm-train-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.bm-train-list small {
+  opacity: 0.6;
+  margin-right: 4px;
+}
+.bm-train-list .bm-chip {
+  text-transform: none;
+}
+.bm-train-list .bm-note {
+  flex-basis: 100%;
+  margin-top: 4px;
+}
+.bm-train-list .bm-note {
+  color: rgba(225, 232, 255, 0.68);
+}
+
+/* «Стоп» — вместо микрофона, пока Бурмалдец думает или говорит */
+.bm-mic.bm-stop {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.22), transparent 45%), linear-gradient(135deg, #ff4f6d, #ff7a45) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset, 0 10px 34px rgba(255, 79, 109, 0.5), 0 0 40px rgba(255, 122, 69, 0.25);
+}
+.bm-mic.bm-stop i,
+.bm-stop-s i {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: #fff;
+}
+.bm-stop-s {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ff4f6d, #ff7a45) !important;
+}
+.bm-stop-s i {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* аккаунты */
+.bm-acc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bm-acc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--bm-line);
+  background: rgba(0, 0, 0, 0.2);
+}
+.bm-acc-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.bm-acc-row small {
+  opacity: 0.6;
+}
+.bm-acc-form {
+  display: grid;
+  gap: 8px;
+}
+.bm-acc-form input {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--bm-line2);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--bm-ink);
+  font: 500 14px var(--bm-text);
+}
+.bm-acc-form .bm-btn {
+  justify-self: start;
+}

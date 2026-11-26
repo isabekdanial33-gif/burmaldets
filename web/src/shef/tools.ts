@@ -2,6 +2,7 @@
 // Всё состояние (корзина, холодильник, избранное) — то же, что у сайта на этом устройстве.
 import { ACTIONS, addMacro, forgetCache, listMacros, macroText, resolveContacts, TRIGGERS, type Action, type Trigger } from './macros'
 import { askConfirm, RISKY } from './confirm'
+import { PC_DECLS, PC_EXEC } from './pctools'
 import { getContacts, matchContacts, prepareCall } from './contacts'
 import { getSearch, loadIndex, loadRecipe, type IndexItem, type Recipe } from '../data'
 import { fridgeMatch, keyOf } from '../fridge'
@@ -911,6 +912,9 @@ export const DECLS = [
   fn('look_with_camera', 'Сделать фото камерой и посмотреть: что это за предмет, растение, текст, вещь, блюдо; перевести надпись; прочитать документ.', { purpose: S('Зачем смотрим') }, ['purpose']),
   fn('report_issue', 'Записать в журнал недоработку приложения или рецепта, которую ты заметил (ошибка в рецепте, нет нужной функции, что-то не сработало).', { text: S('Что не так') }, ['text']),
 ]
+
+Object.assign(EXEC, PC_EXEC)
+DECLS.push(...PC_DECLS)
 
 export async function runTool(name: string, args: Obj): Promise<ToolResult> {
   const f = EXEC[name]

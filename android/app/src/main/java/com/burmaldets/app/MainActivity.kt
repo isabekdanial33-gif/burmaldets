@@ -441,6 +441,33 @@ class MainActivity : ComponentActivity() {
                 done(JSONObject().put("ok", true))
             }
             "listen" -> voice.listen { t, how -> done(JSONObject().put("text", t).put("how", how)) }
+            // обучение имени: одна фраза тем же распознавателем, что слушает имя, — чтобы узнать, как он слышит голос хозяина
+            "wakeHear" -> {
+                voice.stop()
+                voice.cancelListen()
+                val timeout = a.optInt("timeout", 6000)
+                if (WakeService.instance == null) WakeService.start(this)
+                var waited = 0
+                val h = android.os.Handler(mainLooper)
+                fun go() {
+                    val svc = WakeService.instance
+                    if (svc == null || WakeService.model == null) {
+                        if (svc != null) io.execute { try { WakeService.loadModel(this) } catch (_: Exception) {} }
+                        waited += 300
+                        if (waited > 15000) done(JSONObject().put("error", "слух не запустился"))
+                        else h.postDelayed({ go() }, 300)
+                        return
+                    }
+                    svc.listenOnce(timeout) { t -> done(JSONObject().put("text", t)) }
+                }
+                go()
+            }
+            "wakeExtra" -> {
+                val list = a.optJSONArray("list") ?: org.json.JSONArray()
+                getSharedPreferences("shef", MODE_PRIVATE).edit().putString("wakeExtra", list.toString()).apply()
+                WakeService.loadExtra(this)
+                done(JSONObject().put("ok", true).put("n", WakeService.extra.size))
+            }
             "cancelListen" -> {
                 voice.cancelListen()
                 done(JSONObject().put("ok", true))

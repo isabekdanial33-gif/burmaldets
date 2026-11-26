@@ -4,9 +4,7 @@
 import type { KaldiRecognizer, Model } from 'vosk-browser'
 import { cloudStt, transcribe } from './llm'
 import { desk, isDesktop } from './net'
-
-/** «Бурмалдец» Vosk слышит как «бур молодец», «Чекунец» — как «чеку нет» (проверено на записях). */
-export const WAKE_WORDS = /(?:^|\s)(?:(?:бур|бор|бура|бурма|бурный)\s+(?:молодец|малец|мальца|молодца|молодцы)|(?:чеку|чику|чека|чекан)\s+(?:нет|нец|конец|нету)|бурмалд\S*|чекун\S*)(?=\s|$)/
+import { afterWake, wakeEnd, type Word } from './wake'
 
 type Level = { value: number }
 /** Короткий журнал слуха (для отладки): window.__bmEar */
@@ -81,13 +79,15 @@ export async function deskWake(onWake: (rest: string) => void) {
     await mic()
     if (!wakeOn) return
     const rec = new m.KaldiRecognizer(RATE)
+    rec.setWords(true)
     wakeRec = rec
     let fired = false
     let timer = 0
-    const fire = (text: string) => {
-      const mt = text.match(WAKE_WORDS)
-      if (!mt) return false
-      const rest = text.slice((mt.index || 0) + mt[0].length).trim()
+    const fire = (text: string, final: boolean, words?: Word[]) => {
+      const end = wakeEnd(text, undefined, final, words)
+      if (end < 0) return false
+      note('wake: ' + text)
+      const rest = afterWake(text, end)
       clearTimeout(timer)
       stopDeskWake()
       // позвали по имени — показываем панель у шара
@@ -98,15 +98,16 @@ export async function deskWake(onWake: (rest: string) => void) {
     }
     rec.on('partialresult', (msg) => {
       const p = (msg as { result: { partial: string } }).result.partial
-      if (!fired && WAKE_WORDS.test(p)) {
+      if (!fired && wakeEnd(p, undefined, false) >= 0) {
         fired = true
         // ждём конец фразы: вдруг команда идёт сразу за словом
-        timer = window.setTimeout(() => fire(p) || (fired = false), 1600)
+        timer = window.setTimeout(() => fire(p, false) || (fired = false), 1600)
       }
     })
     rec.on('result', (msg) => {
-      const t = (msg as { result: { text: string } }).result.text || ''
-      if (t && fire(t)) return
+      const r = (msg as { result: { text: string; result?: Word[] } }).result
+      const t = r.text || ''
+      if (t && fire(t, true, r.result)) return
       if (fired) fired = false
     })
     sink = (b) => wakeRec === rec && rec.acceptWaveformFloat(b, RATE)
@@ -135,7 +136,8 @@ let listening = false
 let cancelFn: (() => void) | null = null
 export const deskCancel = () => cancelFn?.()
 
-export function deskListen(onPartial: ((t: string) => void) | undefined, level: Level): Promise<Heard> {
+/** voskOnly — только распознаватель на компьютере (для обучения голосу: нужно ровно то, что слышит слово-активатор). */
+export function deskListen(onPartial: ((t: string) => void) | undefined, level: Level, voskOnly = false): Promise<Heard> {
   return new Promise((resolve) => {
     ;(async () => {
       listening = true
@@ -170,7 +172,7 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
         if (!wakeOn) micOffSoon()
         if (how === 'cancel' || !speech) return resolve({ text: '', how: how === 'cancel' ? 'cancel' : 'тишина' })
         let text = ''
-        if (cloudStt()) {
+        if (cloudStt() && !voskOnly) {
           try {
             // облако точнее, но если оно задумалось дольше 3 секунд, а Vosk уже разобрал фразу — не ждём
             const local = () => (voskText || partial).trim().split(/\s+/).length >= 2
@@ -206,7 +208,7 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
             const p = (msg as { result: { partial: string } }).result.partial
             if (p) {
               partial = (voskText + ' ' + p).trim()
-              if (!cloudStt()) onPartial?.(partial)
+              if (!cloudStt() || voskOnly) onPartial?.(partial)
             }
           })
           rec.on('result', (msg) => {
@@ -219,7 +221,7 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
         listening = false
         return
       }
-      if (cloudStt()) onPartial?.('')
+      if (cloudStt() && !voskOnly) onPartial?.('')
       note('listen start')
       let nb = 0
       sink = (b) => {
