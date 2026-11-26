@@ -6,7 +6,7 @@ import { getCfg, setCfg } from './ai'
 import { isAndroid, nativeCall } from './bridge'
 import { deskListen } from './desk'
 import { isDesktop } from './net'
-import { chime, micLevel, stopWake } from './speech'
+import { chime, micLevel, setTraining } from './speech'
 import { norm, wakeEnd } from './wake'
 
 const ASK = ['Гудвин', 'Гудвин', 'Гудвин']
@@ -47,15 +47,16 @@ export default function WakeTrain() {
   }
   const finish = () => {
     setRun((r) => r && { ...r, state: 'done' })
+    setTraining(false)
     if (isAndroid) nativeCall('sleep', {}, 4000).catch(() => {})
-    else window.dispatchEvent(new Event('bm:rewake'))
   }
 
   const start = async () => {
     setErr('')
     setTries([])
     box.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    if (!isAndroid) stopWake()
+    // разговор и слух имени останавливаем на всё время обучения — иначе «Гудвин» будит ассистента
+    setTraining(true)
     const learned = [...list]
     const got: Try[] = []
     for (let i = 0; i < ASK.length; i++) {
@@ -93,7 +94,7 @@ export default function WakeTrain() {
         <b>Узнавать имя моим голосом</b>
         <small>
           Обычно имя «Гудвин» распознаётся сразу. Если он откликается плохо — скажите имя
-          {' ' + ASK.length} раз — запомню, как оно звучит у вас.
+          {' '}три раза — запомню, как оно звучит у вас.
         </small>
       </div>
       {cur ? (

@@ -1,7 +1,7 @@
 {
   "name": "burmaldets-desktop",
   "productName": "Гудвин",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "Гудвин — голосовой ИИ-ассистент для Windows",
   "main": "main.js",
   "private": true,

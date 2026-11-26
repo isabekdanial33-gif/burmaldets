@@ -14,11 +14,11 @@ import Help from './Help'
 import CardView, { type Card } from './Card'
 import Settings from './Settings'
 import Onboarding from './Setup'
-import { getCfg } from './ai'
+import { getCfg, keyFor, onCfg } from './ai'
 import { isAndroid, nativeCall, onNative } from './bridge'
 import { isDesktop } from './net'
 import { shefLog } from './log'
-import { cancelListen, canHear, chime, listen, say, startWake, stopSpeaking, stopWake, unlockAudio } from './speech'
+import { cancelListen, canHear, chime, isTraining, listen, say, startWake, stopSpeaking, stopWake, unlockAudio } from './speech'
 import { deskCall, ui } from './tools'
 import { getMode, onMode, setMode, type Mode } from './mode'
 import { ICam, IChats, IClose, IGear, IHelp, IKey, IMic, ISend } from './Icons'
@@ -138,7 +138,8 @@ function Assistant() {
   const sleep = useCallback(() => {
     if (!alive.current) return
     setPhase(isAndroid || wakeOn ? 'sleep' : 'idle')
-    if (isAndroid) nativeCall('sleep', {}, 3000).catch(() => {})
+    // во время обучения имени служба слушает фразы для обучения — не будим её слух имени
+    if (isAndroid && !isTraining()) nativeCall('sleep', {}, 3000).catch(() => {})
     armClose()
   }, [wakeOn, armClose])
 
@@ -179,6 +180,8 @@ function Assistant() {
               if (halt.current) return
               if (queued.current) break
               if (!h.text && h.how !== 'cancel') shefLog('не расслышал', h.how || 'тишина')
+              // полная тишина — человек ничего не сказал: один раз выключаемся, а не переспрашиваем (без лишних щелчков)
+              if (!h.text && /тишина/.test(h.how)) break
             }
             if (!alive.current) return
             if (queued.current) {
@@ -292,6 +295,10 @@ function Assistant() {
       })
     if (isAndroid) {
       syncWakeExtra()
+      const syncKey = () => void nativeCall('earKey', { gemini: keyFor('gemini') }, 3000).catch(() => {})
+      syncKey()
+      const offCfg = onCfg(syncKey)
+      offs.push(() => (offCfg(), true))
       nativeCall<{ wake?: boolean; cmd?: string | null; say?: string | null; sheet?: boolean }>('ready', {}, 5000)
         .then((r) => {
           if (r.sheet) setLayout('sheet')
@@ -324,6 +331,12 @@ function Assistant() {
     if (isDesktop) void deskCall('phase', { phase })
   }, [phase])
 
+  // обучение имени: идущий разговор останавливаем, иначе он перехватывает «Гудвин»
+  useEffect(() => {
+    const f = () => busy.current && stopAll()
+    window.addEventListener('bm:train', f)
+    return () => window.removeEventListener('bm:train', f)
+  })
   // после обучения голосу слух перезапускается (оно забирало микрофон)
   const [rewake, setRewake] = useState(0)
   useEffect(() => {

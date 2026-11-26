@@ -119,7 +119,7 @@ class Voice(private val ctx: Context, private val emit: (String, String) -> Unit
      */
     fun listen(cb: (String, String) -> Unit) {
         val my = ++listenSeq
-        WakeService.instance?.pause()
+        WakeService.instance?.release()
         val started = System.currentTimeMillis()
         var once = false
         val fin = { t: String, how: String ->
@@ -172,7 +172,7 @@ class Voice(private val ctx: Context, private val emit: (String, String) -> Unit
                             // распознаватель ещё занят прошлым разом — повторяем
                             error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && tries < 3 -> { tries++; main.postDelayed({ attempt() }, 350) }
                             // «не расслышал» мгновенно, человек ещё не начал говорить — слушаем дальше
-                            (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && el < 9000 && tries < 3 -> { tries++; main.postDelayed({ attempt() }, 120) }
+                            (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && el < 9000 && tries < 1 -> { tries++; main.postDelayed({ attempt() }, 120) }
                             error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> fin("", "google тишина $error")
                             // сеть, язык не скачан, нет доступа к микрофону и т.п. — слушаем сами
                             else -> vosk("google err $error", 9000)
@@ -184,7 +184,7 @@ class Voice(private val ctx: Context, private val emit: (String, String) -> Unit
                     val t = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() } ?: lastPartial
                     main.post {
                         close()
-                        if (t.isBlank() && !heardSpeech && System.currentTimeMillis() - started < 9000 && tries < 3) { tries++; attempt() }
+                        if (t.isBlank() && !heardSpeech && System.currentTimeMillis() - started < 9000 && tries < 1) { tries++; attempt() }
                         else fin(t, "google")
                     }
                 }

@@ -303,8 +303,8 @@ class MainActivity : ComponentActivity() {
             return
         }
         val pm = getSystemService(POWER_SERVICE) as PowerManager
-        if (!pm.isIgnoringBatteryOptimizations(packageName) && !prefs.getBoolean("askedBattery", false)) {
-            prefs.edit().putBoolean("askedBattery", true).apply()
+        if (!pm.isIgnoringBatteryOptimizations(packageName) && !prefs.getBoolean("askedBattery2", false)) {
+            prefs.edit().putBoolean("askedBattery2", true).apply()
             dialog("Чтобы Гудвин не засыпал",
                 "Разрешите работу без ограничений батареи — иначе телефон может выключить Гудвина ночью. Расход — несколько процентов в сутки.") {
                 @SuppressLint("BatteryLife")
@@ -461,6 +461,35 @@ class MainActivity : ComponentActivity() {
                     svc.listenOnce(timeout) { t -> done(JSONObject().put("text", t)) }
                 }
                 go()
+            }
+            // команда: микрофон держит служба, звук приходит событиями «pcm» (распознаёт Gemini в приложении)
+            "earListen" -> {
+                if (a.optBoolean("on")) {
+                    voice.cancelListen()
+                    if (WakeService.instance == null) WakeService.start(this)
+                    var waited = 0
+                    val h = android.os.Handler(mainLooper)
+                    fun go() {
+                        val svc = WakeService.instance
+                        if (svc == null) {
+                            waited += 100
+                            if (waited > 3000) done(JSONObject().put("ok", false)) else h.postDelayed({ go() }, 100)
+                            return
+                        }
+                        svc.cmdStart()
+                        done(JSONObject().put("ok", true))
+                    }
+                    go()
+                } else {
+                    val svc = WakeService.instance
+                    if (svc == null) done(JSONObject().put("text", ""))
+                    else io.execute { done(JSONObject().put("text", svc.cmdStop())) }
+                }
+            }
+            // ключ Gemini — чтобы служба могла перепроверить нечёткое «Гудвин» и при выключенном экране
+            "earKey" -> {
+                prefs.edit().putString("gk", a.optString("gemini")).apply()
+                done(JSONObject().put("ok", true))
             }
             "wakeExtra" -> {
                 val list = a.optJSONArray("list") ?: org.json.JSONArray()

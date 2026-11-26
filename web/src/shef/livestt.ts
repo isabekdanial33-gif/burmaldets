@@ -96,6 +96,11 @@ export class LiveStt {
     }
   }
 
+  /** Уже что-то расслышал (даже если наш детектор речи не заметил тихий голос). */
+  get any() {
+    return !!(this.finals || this.interim)
+  }
+
   get failed() {
     return this.dead && !this.ok
   }

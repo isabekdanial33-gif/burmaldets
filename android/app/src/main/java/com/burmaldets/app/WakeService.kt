@@ -15,19 +15,22 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import org.json.JSONArray
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
-import org.vosk.android.RecognitionListener
-import org.vosk.android.SpeechService
 import java.io.File
+import kotlin.math.abs
 
 /**
  * Слушает слово «Гудвин» постоянно — и при выключенном экране, и на блокировке.
  * Распознавание идёт прямо на телефоне (Vosk), звук никуда не отправляется.
  * Пока Гудвин разговаривает, микрофон отдаётся распознаванию команд, потом служба снова слушает.
  */
-class WakeService : Service(), RecognitionListener {
+class WakeService : Service() {
 
     companion object {
         const val CH_LISTEN = "shef_listen"
@@ -58,36 +61,33 @@ class WakeService : Service(), RecognitionListener {
         }
 
         /**
-         * Услышали имя? final — законченная реплика (после паузы). Выученная фраза в одно слово (например «отец») —
-         * обычное слово, поэтому будит, только если сказана отдельной репликой («Отец!») или обращением с паузой («Отец, … »).
+         * Насколько уверенно в законченной фразе прозвучало имя: -1 — не было; иначе уверенность Vosk в слове «гудвин» (0..1).
+         * Выученная фраза в одно слово (например «отец») — обычное слово, поэтому считается, только если сказана отдельной
+         * репликой («Отец!») или обращением с паузой («Отец, … »).
          */
-        fun heardName(text: String, final: Boolean, words: org.json.JSONArray? = null): Boolean {
+        fun nameScore(text: String, words: JSONArray? = null): Double {
             val t = norm(text)
-            if (t.isEmpty()) return false
+            if (t.isEmpty()) return -1.0
             if (WAKE.containsMatchIn(t)) {
-                // строго: только законченная фраза и чёткое слово (уверенность распознавателя от 0.6)
-                if (!final) return false
-                if (words == null) return true
+                if (words == null) return 1.0
                 for (i in 0 until words.length()) {
                     val w = words.optJSONObject(i) ?: continue
-                    if (norm(w.optString("word")).startsWith("гудвин")) return w.optDouble("conf", 1.0) >= 0.6
+                    if (norm(w.optString("word")).startsWith("гудвин")) return w.optDouble("conf", 1.0).let { if (it >= 0.4) it else -1.0 }
                 }
-                return true
+                return 1.0
             }
             for (p in extra) {
                 if (!p.contains(' ')) {
-                    if (final && t == p) return true
-                    // «Отец, включи музыку»: слово первым и после него пауза-запятая (в обычной речи паузы между словами короче)
-                    if (final && words != null && words.length() > 1) {
+                    if (t == p) return 0.7
+                    if (words != null && words.length() > 1) {
                         val w0 = words.optJSONObject(0)
                         val w1 = words.optJSONObject(1)
-                        if (w0 != null && w1 != null && norm(w0.optString("word")) == p && w1.optDouble("start") - w0.optDouble("end") >= 0.18) return true
+                        if (w0 != null && w1 != null && norm(w0.optString("word")) == p && w1.optDouble("start") - w0.optDouble("end") >= 0.18) return 0.7
                     }
-                } else if (" $t ".contains(" $p ")) return true
+                } else if (" $t ".contains(" $p ")) return 0.7
             }
-            return false
+            return -1.0
         }
-
 
         @Volatile var instance: WakeService? = null
         @Volatile var model: Model? = null
@@ -203,9 +203,13 @@ class WakeService : Service(), RecognitionListener {
     fun applyMode() {
         if (Bubble.enabled(this) && Bubble.canShow(this)) bubble.show() else bubble.hide()
         if (listenOn(this)) {
-            if (!paused && speech == null && model != null) listenForName()
-        } else {
-            stopRec()
+            if (!paused && once == null && mode == Mode.IDLE) {
+                mode = Mode.WAKE
+                startEar()
+            }
+        } else if (mode == Mode.WAKE) {
+            mode = Mode.IDLE
+            stopEar()
         }
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTE_ID, note())
     }
@@ -217,15 +221,11 @@ class WakeService : Service(), RecognitionListener {
         .setOngoing(true)
         .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
         .build()
-    private var speech: SpeechService? = null
     /** Плавающая кнопка: нажали — как будто позвали по имени. */
     val bubble by lazy { Bubble(this) { wake(fromBubble = true) } }
     private var paused = false
     private var lastWake = 0L
     private var cpuLock: PowerManager.WakeLock? = null
-    /** Разовое распознавание фразы (когда на телефоне нет распознавания Google). */
-    private var once: ((String) -> Unit)? = null
-    private var oncePartial = ""
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -249,9 +249,9 @@ class WakeService : Service(), RecognitionListener {
             stopSelf()
             return
         }
-        // процессор не засыпает, пока слушаем (иначе на части телефонов микрофон «глохнет» при выключенном экране)
         watchPhone()
         if (Bubble.enabled(this)) main.post { if (MainActivity.current?.isVisible != true) bubble.show() }
+        // процессор не засыпает, пока слушаем (иначе на части телефонов микрофон «глохнет» при выключенном экране)
         cpuLock = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "shef:listen").apply {
             setReferenceCounted(false)
             acquire()
@@ -259,7 +259,12 @@ class WakeService : Service(), RecognitionListener {
         Thread {
             try {
                 loadModel(this)
-                main.post { if (!paused && listenOn(this)) listenForName() }
+                main.post {
+                    if (!paused && once == null && listenOn(this)) {
+                        mode = Mode.WAKE
+                        startEar()
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "model", e)
                 Journal.add(this, "ошибка", "не загрузилась модель распознавания: ${e.message}")
@@ -279,116 +284,330 @@ class WakeService : Service(), RecognitionListener {
         bubble.hide()
         try { unregisterReceiver(events) } catch (_: Exception) {}
         netCb?.let { try { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(it) } catch (_: Exception) {} }
-        stopRec()
+        mode = Mode.IDLE
+        stopEar()
         cpuLock?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }
 
-    private fun stopRec() {
-        try {
-            speech?.stop()
-            speech?.shutdown()
-        } catch (_: Exception) {
-        }
-        speech = null
+    // ================= Микрофон: один на всё время =================
+    // Раньше микрофон то и дело передавался между слухом имени, распознаванием Google и Vosk —
+    // он щёлкал вкл/выкл по нескольку раз за фразу. Теперь его держит одна служба и не отпускает:
+    // меняется только то, куда идёт звук (имя / команда / обучение / никуда).
+    private enum class Mode { IDLE, WAKE, CMD, ONCE }
+
+    @Volatile private var mode = Mode.IDLE
+    @Volatile private var earRun = false
+    @Volatile private var earThread: Thread? = null
+    /** Пересоздать распознаватель (новая фраза). */
+    @Volatile private var fresh = false
+    @Volatile private var verifying = false
+    @Volatile private var blockedWarned = false
+
+    /** Разовая фраза (обучение имени или запасное распознавание). */
+    @Volatile private var once: ((String) -> Unit)? = null
+    @Volatile private var onceDeadline = 0L
+    @Volatile private var oncePartial = ""
+
+    /** Команда: звук уходит в приложение (там его распознаёт Gemini), Vosk на телефоне — запасной текст. */
+    private val cmdText = StringBuilder()
+    @Volatile private var cmdDone: java.util.concurrent.CountDownLatch? = null
+
+    private fun startEar() {
+        if (earThread != null) return
+        earRun = true
+        earThread = Thread({ earLoop() }, "goodwin-ear").also { it.start() }
     }
 
-    private fun listenForName() {
-        val m = model ?: return
-        stopRec()
-        try {
-            // полный словарь, а не грамматика: с грамматикой Vosk «натягивает» обычную речь на имя
-            val rec = Recognizer(m, 16000f)
-            rec.setWords(true)
-            speech = SpeechService(rec, 16000f).also { it.startListening(this) }
+    private fun stopEar() {
+        earRun = false
+        val t = earThread
+        earThread = null
+        if (t != null && t !== Thread.currentThread()) try { t.join(700) } catch (_: Exception) {}
+    }
+
+    private fun earLoop() {
+        val rate = 16000
+        val min = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+        val ar = try {
+            AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min, rate * 2 * 2))
         } catch (e: Exception) {
-            Log.e(TAG, "listen", e)
-            main.postDelayed({ if (!paused) listenForName() }, 3000)
+            Log.w(TAG, "AudioRecord", e)
+            null
+        }
+        if (ar == null || ar.state != AudioRecord.STATE_INITIALIZED) {
+            ar?.release()
+            Log.w(TAG, "микрофон не открылся")
+            if (earThread === Thread.currentThread()) earThread = null
+            once?.let { finishOnce("") }
+            cmdDone?.countDown()
+            main.postDelayed({ if (mode != Mode.IDLE) startEar() }, 3000)
+            return
+        }
+        ar.startRecording()
+        Log.i(TAG, "микрофон включён")
+        val buf = ShortArray(1600) // 0,1 с
+        var rec: Recognizer? = null
+        var recMode = Mode.IDLE
+        val utt = ArrayDeque<ShortArray>()
+        var zeroMs = 0
+        val web = java.io.ByteArrayOutputStream()
+        try {
+            while (earRun) {
+                val n = ar.read(buf, 0, buf.size)
+                if (n <= 0) {
+                    if (n < 0) Thread.sleep(100)
+                    continue
+                }
+                val m = mode
+                // система «заглушила» микрофон (бывает в фоне при выключенном экране) — сообщаем один раз
+                var peak = 0
+                for (i in 0 until n) { val a = abs(buf[i].toInt()); if (a > peak) peak = a }
+                if (peak == 0 && m == Mode.WAKE) {
+                    zeroMs += n / 16
+                    if (zeroMs > 20000 && !blockedWarned) {
+                        blockedWarned = true
+                        main.post { micBlocked() }
+                    }
+                } else if (peak > 0) zeroMs = 0
+                // сменился режим — закрываем прошлую фразу и начинаем новую
+                if (m != recMode || fresh || (rec == null && m != Mode.IDLE && model != null)) {
+                    if (recMode == Mode.CMD) {
+                        rec?.let { r -> try { addCmd(JSONObject(r.finalResult).optString("text")) } catch (_: Exception) {} }
+                        flushWeb(web)
+                        cmdDone?.countDown()
+                    }
+                    try { rec?.close() } catch (_: Exception) {}
+                    rec = null
+                    fresh = false
+                    recMode = m
+                    utt.clear()
+                    web.reset()
+                    val md = model
+                    if (md != null && m != Mode.IDLE) rec = Recognizer(md, 16000f).also { if (m == Mode.WAKE) it.setWords(true) }
+                }
+                when (m) {
+                    Mode.IDLE -> {}
+                    Mode.WAKE -> {
+                        val r = rec ?: continue
+                        if (!verifying) {
+                            utt.addLast(buf.copyOf(n))
+                            while (utt.size > 120) utt.removeFirst() // не больше 12 с
+                        }
+                        if (r.acceptWaveForm(buf, n)) {
+                            val j = JSONObject(r.result)
+                            val audio = utt.toList()
+                            utt.clear()
+                            if (!verifying) onWakeResult(j, audio)
+                        }
+                    }
+                    Mode.CMD -> {
+                        for (i in 0 until n) {
+                            web.write(buf[i].toInt() and 0xff)
+                            web.write((buf[i].toInt() shr 8) and 0xff)
+                        }
+                        if (web.size() >= 8000) flushWeb(web) // каждые 0,25 с
+                        rec?.let { r -> if (r.acceptWaveForm(buf, n)) addCmd(JSONObject(r.result).optString("text")) }
+                    }
+                    Mode.ONCE -> {
+                        val r = rec ?: continue
+                        if (r.acceptWaveForm(buf, n)) {
+                            // пустой результат — это просто пауза перед речью, слушаем дальше
+                            val t = JSONObject(r.result).optString("text")
+                            if (t.isNotBlank()) finishOnce(t)
+                        } else {
+                            val p = JSONObject(r.partialResult).optString("partial")
+                            if (p.isNotBlank() && p != oncePartial) {
+                                oncePartial = p
+                                MainActivity.current?.emit("stt-partial", JSONObject.quote(p))
+                            }
+                        }
+                        if (once != null && System.currentTimeMillis() > onceDeadline) {
+                            finishOnce(JSONObject(r.finalResult).optString("text").ifBlank { oncePartial })
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "ear", e)
+        } finally {
+            if (recMode == Mode.CMD) cmdDone?.countDown()
+            try { rec?.close() } catch (_: Exception) {}
+            try { ar.stop() } catch (_: Exception) {}
+            ar.release()
+            Log.i(TAG, "микрофон выключен")
         }
     }
 
-    /** Отдать микрофон (Гудвин разговаривает). */
+    private fun flushWeb(web: java.io.ByteArrayOutputStream) {
+        if (web.size() == 0) return
+        val b64 = android.util.Base64.encodeToString(web.toByteArray(), android.util.Base64.NO_WRAP)
+        web.reset()
+        MainActivity.current?.emit("pcm", JSONObject.quote(b64))
+    }
+
+    private fun addCmd(t: String) {
+        if (t.isBlank()) return
+        synchronized(cmdText) { if (cmdText.isNotEmpty()) cmdText.append(' '); cmdText.append(t) }
+    }
+
+    /** Приложение слушает команду: звук идёт к нему кусками по 0,25 с (событие «pcm»). Микрофон при этом не переключается. */
+    fun cmdStart() {
+        paused = true
+        once?.let { finishOnce("") }
+        synchronized(cmdText) { cmdText.setLength(0) }
+        cmdDone = java.util.concurrent.CountDownLatch(1)
+        mode = Mode.CMD
+        fresh = true
+        startEar()
+    }
+
+    /** Команда закончилась (решает приложение по паузе). Возвращает, что расслышал Vosk на телефоне, — запасной текст. */
+    fun cmdStop(): String {
+        val l = cmdDone
+        // атомарно: если тем временем началось обучение (ONCE), его не сбиваем
+        synchronized(this) {
+            if (mode != Mode.CMD) return synchronized(cmdText) { cmdText.toString() }
+            mode = Mode.IDLE
+        }
+        if (earThread != null) try { l?.await(800, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
+        // имя не слушаем — Гудвин сейчас ответит; микрофон остаётся включённым (без щелчков), звук никуда не идёт
+        if (!listenOn(this)) main.post { if (mode == Mode.IDLE) stopEar() }
+        return synchronized(cmdText) { cmdText.toString() }
+    }
+
+    /** Гудвин разговаривает: звук никуда не идёт, но микрофон не выключаем — иначе он щёлкает между фразами. */
     fun pause() {
         paused = true
-        once = null
-        stopRec()
+        once?.let { finishOnce("") }
+        if (mode != Mode.CMD) mode = Mode.IDLE
+        if (!listenOn(this) && mode == Mode.IDLE) stopEar()
     }
 
-    /** Снова слушать имя. */
+    /** Совсем отдать микрофон (нужно распознаванию Google, оно не умеет делить микрофон). */
+    fun release() {
+        paused = true
+        once?.let { finishOnce("") }
+        mode = Mode.IDLE
+        stopEar()
+    }
+
+    /** Снова слушать имя. Во время обучения имени — не мешаем ему. */
     fun resume() {
-        if (!paused && speech != null) return
+        if (once != null) return
         paused = false
-        once = null
         if (!listenOn(this)) {
-            stopRec()
+            mode = Mode.IDLE
+            stopEar()
             return
         }
-        listenForName()
+        if (mode != Mode.WAKE) {
+            mode = Mode.WAKE
+            fresh = true
+        }
+        startEar()
     }
 
-    /** Одна фраза целиком через Vosk — запасной вариант распознавания. */
+    /** Одна фраза целиком через Vosk (обучение имени или запасное распознавание). Имя в это время не будит. */
     fun listenOnce(timeoutMs: Int, cb: (String) -> Unit) {
-        val m = model
-        if (m == null) {
+        if (model == null) {
             cb("")
             return
         }
         paused = true
-        stopRec()
+        once?.let { finishOnce("") }
         once = cb
         oncePartial = ""
-        try {
-            val rec = Recognizer(m, 16000f)
-            speech = SpeechService(rec, 16000f).also { it.startListening(this, timeoutMs) }
-        } catch (e: Exception) {
-            once = null
-            cb("")
-        }
+        onceDeadline = System.currentTimeMillis() + timeoutMs
+        synchronized(this) { mode = Mode.ONCE }
+        fresh = true
+        startEar()
     }
 
     private fun finishOnce(text: String) {
         val cb = once ?: return
         once = null
-        stopRec()
+        if (mode == Mode.ONCE) mode = Mode.IDLE
         main.post { cb(text) }
     }
 
-    override fun onPartialResult(hypothesis: String?) {
-        if (once != null) {
-            val p = JSONObject(hypothesis ?: "{}").optString("partial")
-            if (p.isNotBlank()) {
-                oncePartial = p
-                MainActivity.current?.emit("stt-partial", JSONObject.quote(p))
+    /** Законченная фраза в режиме ожидания имени. */
+    private fun onWakeResult(j: JSONObject, audio: List<ShortArray>) {
+        val text = j.optString("text")
+        val score = nameScore(text, j.optJSONArray("result"))
+        if (score < 0) return
+        val key = getSharedPreferences("shef", Context.MODE_PRIVATE).getString("gk", "") ?: ""
+        Log.i(TAG, "кандидат «$text» уверенность $score")
+        // чёткое «Гудвин» — сразу; сомнительное — спрашиваем Gemini по записи (если есть ключ и сеть)
+        if (score >= 0.85 || (key.isEmpty() && score >= 0.6)) {
+            wake()
+            return
+        }
+        if (key.isEmpty()) return
+        verifying = true
+        Thread {
+            val ok = try { verifyName(key, audio) } catch (_: Exception) { null }
+            verifying = false
+            Log.i(TAG, "проверка облаком: $ok")
+            // облако не ответило (нет сети, лимит) — как раньше: будим при уверенности от 0.6
+            if (ok == true || (ok == null && score >= 0.6)) wake()
+        }.start()
+    }
+
+    private fun verifyName(key: String, audio: List<ShortArray>): Boolean? {
+        val n = audio.sumOf { it.size }
+        if (n < 3200) return null
+        val bb = java.nio.ByteBuffer.allocate(44 + n * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        bb.put("RIFF".toByteArray()).putInt(36 + n * 2).put("WAVE".toByteArray()).put("fmt ".toByteArray())
+            .putInt(16).putShort(1).putShort(1).putInt(16000).putInt(32000).putShort(2).putShort(16)
+            .put("data".toByteArray()).putInt(n * 2)
+        for (a in audio) for (s in a) bb.putShort(s)
+        val wav = android.util.Base64.encodeToString(bb.array(), android.util.Base64.NO_WRAP)
+        val body = JSONObject()
+            .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray()
+                .put(JSONObject().put("text", "Голосового ассистента зовут «Гудвин». Прозвучало ли в этой записи это имя — отчётливо, именно это слово (похожие обычные слова не считаются)? Ответь одним словом: да или нет."))
+                .put(JSONObject().put("inlineData", JSONObject().put("mimeType", "audio/wav").put("data", wav))))))
+            .put("generationConfig", JSONObject().put("temperature", 0).put("maxOutputTokens", 5).put("thinkingConfig", JSONObject().put("thinkingLevel", "minimal")))
+            .toString().toByteArray()
+        val started = System.currentTimeMillis()
+        for (m in listOf("gemini-3.5-flash-lite", "gemini-flash-lite-latest")) {
+            if (System.currentTimeMillis() - started > 4000) break
+            try {
+                val c = java.net.URL("https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent").openConnection() as java.net.HttpURLConnection
+                c.connectTimeout = 3000
+                c.readTimeout = 4000
+                c.requestMethod = "POST"
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json")
+                c.setRequestProperty("x-goog-api-key", key)
+                c.outputStream.use { it.write(body) }
+                if (c.responseCode != 200) continue
+                val parts = JSONObject(c.inputStream.bufferedReader().readText()).optJSONArray("candidates")
+                    ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts") ?: continue
+                val sb = StringBuilder()
+                for (i in 0 until parts.length()) {
+                    val p = parts.optJSONObject(i) ?: continue
+                    if (!p.optBoolean("thought")) sb.append(p.optString("text"))
+                }
+                val t = sb.toString().trim().lowercase()
+                return if (t.startsWith("да")) true else if (t.startsWith("нет")) false else null
+            } catch (e: Exception) {
+                Log.w(TAG, "verify $m", e)
             }
-            return
         }
-        val p = JSONObject(hypothesis ?: "{}").optString("partial")
-        if (heardName(p, false)) wake()
+        return null
     }
 
-    override fun onResult(hypothesis: String?) {
-        val j = JSONObject(hypothesis ?: "{}")
-        if (once != null) {
-            // пустой результат — это просто пауза перед речью, слушаем дальше
-            val t = j.optString("text")
-            if (t.isNotBlank()) finishOnce(t)
-            return
-        }
-        if (heardName(j.optString("text"), true, j.optJSONArray("result"))) wake()
-    }
-
-    override fun onFinalResult(hypothesis: String?) {
-        if (once != null) finishOnce(JSONObject(hypothesis ?: "{}").optString("text").ifBlank { oncePartial })
-    }
-
-    override fun onError(exception: Exception?) {
-        Log.w(TAG, "error", exception)
-        if (once != null) finishOnce(oncePartial)
-        else main.postDelayed({ if (!paused && listenOn(this)) listenForName() }, 2000)
-    }
-
-    override fun onTimeout() {
-        if (once != null) finishOnce(oncePartial)
+    /** Микрофон молчит нулями — Android не даёт слушать в фоне. Подсказываем, как разрешить. */
+    private fun micBlocked() {
+        Journal.add(this, "ошибка", "микрофон в фоне выдаёт тишину — телефон не даёт слушать при выключенном экране")
+        val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))
+        val pi = PendingIntent.getActivity(this, 3, i, PendingIntent.FLAG_IMMUTABLE)
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(10, Notification.Builder(this, CH_WAKE)
+            .setSmallIcon(R.drawable.ic_shef).setContentTitle("Гудвин не слышит в фоне")
+            .setContentText("Телефон глушит микрофон. Батарея → «Без ограничений», разрешите автозапуск и микрофон «всегда».")
+            .setStyle(Notification.BigTextStyle().bigText("Телефон глушит микрофон, когда экран выключен. Откройте: Батарея → «Без ограничений», разрешите автозапуск (если есть) и микрофон. Потом откройте Гудвина один раз."))
+            .setContentIntent(pi).setAutoCancel(true).build())
     }
 
     /** Услышал «Гудвин»: включаем экран и показываем Гудвина поверх всего, даже поверх блокировки. */

@@ -2,7 +2,7 @@
 // Слушает: на телефоне — нативное распознавание; в браузере — Web Speech API; в приложении для компьютера — desk.ts.
 import { getCfg, keyFor, setCfg, type VoiceEngine } from './ai'
 import { isAndroid, nativeCall, onNative } from './bridge'
-import { tts, ttsOpenAI } from './llm'
+import { cloudStt, tts, ttsOpenAI } from './llm'
 import { desk, isDesktop } from './net'
 import { deskCancel, deskListen, deskWake, stopDeskWake } from './desk'
 
@@ -428,8 +428,10 @@ export function listen(onPartial?: (t: string) => void): Promise<Heard> {
   const cancelled = new Promise<Heard>((res) => {
     cancelCurrent = () => {
       cancelCurrent = null
-      if (isAndroid) nativeCall('cancelListen', {}, 3000).catch(() => {})
-      else if (isDesktop) deskCancel()
+      if (isAndroid) {
+        deskCancel()
+        nativeCall('cancelListen', {}, 3000).catch(() => {})
+      } else if (isDesktop) deskCancel()
       else curRec?.abort()
       res({ text: '', how: 'cancel' })
     }
@@ -439,7 +441,15 @@ export function listen(onPartial?: (t: string) => void): Promise<Heard> {
 
 let curRec: Rec | null = null
 function listenInner(onPartial?: (t: string) => void): Promise<Heard> {
-  if (isAndroid) {
+  // телефон + облачный ключ: микрофон не переключается (его держит служба), распознаёт Gemini — как на ПК
+  if (isAndroid && cloudStt())
+    return deskListen(onPartial, micLevel).then((h) => (h.how.startsWith('нет микрофона') ? listenNative(onPartial) : h))
+  if (isAndroid) return listenNative(onPartial)
+  return listenOther(onPartial)
+}
+
+function listenNative(onPartial?: (t: string) => void): Promise<Heard> {
+  {
     let last = ''
     const off = onNative('stt-partial', (d) => {
       const p = String(d || '')
@@ -454,6 +464,9 @@ function listenInner(onPartial?: (t: string) => void): Promise<Heard> {
         micLevel.value = 0
       })
   }
+}
+
+function listenOther(onPartial?: (t: string) => void): Promise<Heard> {
   if (isDesktop) return deskListen(onPartial, micLevel)
   if (!RecCtor) return Promise.resolve({ text: '', how: 'нет распознавания в браузере' })
   const started = Date.now()
@@ -519,7 +532,16 @@ let wakeOn = false
  * Слушает фоном, пока открыта вкладка. «Гудвин» → onWake(''), «Гудвин, включи музыку» → onWake('включи музыку').
  * На телефоне это делает служба приложения (даже при выключенном экране) — тут не нужно.
  */
+/** Идёт обучение имени: «Гудвин» в это время не будит (иначе обучение невозможно). */
+let trainLock = false
+export const isTraining = () => trainLock
+export function setTraining(on: boolean) {
+  trainLock = on
+  if (on) stopWake()
+  window.dispatchEvent(new Event(on ? 'bm:train' : 'bm:rewake'))
+}
 export function startWake(onWake: (rest: string) => void) {
+  if (trainLock) return
   if (isDesktop) return void deskWake(onWake)
   if (isAndroid || !RecCtor || wakeOn) return
   wakeOn = true

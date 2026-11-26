@@ -4,6 +4,7 @@
 import type { KaldiRecognizer, Model } from 'vosk-browser'
 import { cloudStt, transcribe, verifyName } from './llm'
 import { LiveStt, liveSttReady } from './livestt'
+import { isAndroid, nativeCall, onNative } from './bridge'
 import { desk, isDesktop } from './net'
 import { afterWake, wakeEnd, norm, WAKE_WORDS } from './wake'
 
@@ -43,9 +44,30 @@ let proc: ScriptProcessorNode | null = null
 let sink: ((buf: Float32Array) => void) | null = null
 const RATE = 16000
 
+// На телефоне микрофон держит служба приложения и присылает звук кусками (событие «pcm»).
+let phoneOn = false
+if (isAndroid)
+  onNative('pcm', (d) => {
+    if (!phoneOn || typeof d !== 'string') return
+    const bin = atob(d)
+    const f = new Float32Array(bin.length >> 1)
+    for (let i = 0; i < f.length; i++) {
+      const v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8)
+      f[i] = (v >= 0x8000 ? v - 0x10000 : v) / 0x8000
+    }
+    sink?.(f)
+  })
+
 let offTimer = 0
 async function mic() {
   clearTimeout(offTimer)
+  if (isAndroid) {
+    if (phoneOn) return
+    const r = await nativeCall<{ ok?: boolean }>('earListen', { on: true }, 5000)
+    if (!r.ok) throw new Error('служба слуха не запустилась')
+    phoneOn = true
+    return
+  }
   if (stream && ctx) return
   stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
   ctx = new AudioContext({ sampleRate: RATE })
@@ -63,7 +85,15 @@ function micOffSoon() {
   clearTimeout(offTimer)
   offTimer = window.setTimeout(() => !wakeOn && !listening && micOff(), 12000)
 }
+/** Телефон: команда кончилась — звук больше не нужен; служба отдаёт, что расслышал её Vosk (запасной текст). */
+async function phoneOff(): Promise<string> {
+  if (!phoneOn) return ''
+  phoneOn = false
+  const r = await nativeCall<{ text?: string }>('earListen', { on: false }, 3000).catch(() => ({ text: '' }))
+  return r.text || ''
+}
 function micOff() {
+  if (isAndroid) return
   sink = null
   proc?.disconnect()
   proc = null
@@ -210,8 +240,12 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
             /* пусто */
           }
         }
+        if (isAndroid) {
+          const t = await phoneOff()
+          if (t) voskText = t
+        }
         if (!wakeOn) micOffSoon()
-        if (how === 'cancel' || !speech) {
+        if (how === 'cancel' || (!speech && !live?.any)) {
           live?.close()
           return resolve({ text: '', how: how === 'cancel' ? 'cancel' : 'тишина' })
         }
@@ -244,7 +278,7 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
       const maxT = window.setTimeout(() => finish('max'), 14000)
       try {
         await mic()
-        const m = await model().catch(() => null)
+        const m = isAndroid ? null : await model().catch(() => null)
         if (m) {
           rec = new m.KaldiRecognizer(RATE)
           rec.on('partialresult', (msg) => {
@@ -260,6 +294,8 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
           })
         }
       } catch (e) {
+        clearTimeout(maxT)
+        cancelFn = null
         resolve({ text: '', how: 'нет микрофона: ' + String(e) })
         listening = false
         return
@@ -278,7 +314,8 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
         const sec = b.length / RATE
         if (!speech) {
           floor = floor * 0.9 + v * 0.1
-          if (v > Math.max(0.012, floor * 3)) {
+          // у телефона микрофон без усиления — голос тише, порог ниже
+          if (v > Math.max(isAndroid ? 0.007 : 0.012, floor * 3)) {
             speech = true
             note('speech ' + v.toFixed(3))
           }
@@ -288,7 +325,7 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
           if (!speech && frames.length > 3) frames.shift()
           return
         }
-        silence = v < Math.max(0.01, floor * 2.2) ? silence + sec : 0
+        silence = v < Math.max(isAndroid ? 0.006 : 0.01, floor * 2.2) ? silence + sec : 0
         if (silence > 1.1) finish('пауза')
       }
     })()
