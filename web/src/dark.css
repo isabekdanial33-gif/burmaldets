@@ -1,0 +1,238 @@
+/*
+ * Чёрная тема в стиле техники ГрандШеф: матовый чёрный корпус, графитовые панели,
+ * тёплый оранжевый «нагрев» как акцент, золото — для Grand Chef.
+ * Подключается последней и переопределяет палитру из index.css / v2.css / v3.css.
+ */
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0b;
+  --paper: #141415;
+  --paper2: #1b1b1d;
+  --ink: #f3f1ee;
+  --ink2: #c8c3bc;
+  --muted: #8e8982;
+  --line: #29292c;
+  --accent: #ff6a1f;
+  --accent2: #ff9447;
+  --accent-soft: rgba(255, 106, 31, 0.14);
+  --green: #3fcf8e;
+  --green-soft: rgba(63, 207, 142, 0.13);
+  --amber: #f2b84b;
+  --amber-soft: rgba(242, 184, 75, 0.13);
+  --grey-soft: #1f1f22;
+  --gold: #e2b45a;
+  --gold2: #f5d27e;
+  --gold-ink: #1b1300;
+  --night: #050505;
+  --night2: #19191b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+body {
+  background:
+    radial-gradient(1200px 500px at 85% -120px, rgba(255, 106, 31, 0.1), transparent 60%),
+    radial-gradient(900px 420px at -10% 0, rgba(255, 255, 255, 0.035), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(255, 106, 31, 0.35);
+  color: #fff;
+}
+
+/* скроллбар как у тёмной техники */
+* {
+  scrollbar-color: #333 transparent;
+}
+
+/* ---------- шапка и нижнее меню — «стекло» поверх чёрного ---------- */
+.top {
+  background: rgba(10, 10, 11, 0.78);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.bottom-nav {
+  background: rgba(12, 12, 13, 0.94) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.f-apply {
+  background: linear-gradient(to bottom, rgba(20, 20, 21, 0), var(--paper) 30%);
+}
+
+/* ---------- Grand Chef: золото на чёрном ---------- */
+.top-nav a.nav-gc {
+  background: linear-gradient(135deg, rgba(226, 180, 90, 0.18), rgba(226, 180, 90, 0.08));
+  color: var(--gold2);
+  border: 1px solid rgba(226, 180, 90, 0.35);
+}
+.top-nav a.nav-gc:hover,
+.top-nav a.nav-gc.on {
+  background: linear-gradient(135deg, rgba(226, 180, 90, 0.28), rgba(226, 180, 90, 0.14));
+  color: #ffe3a3;
+}
+.unlock-ico {
+  background: linear-gradient(135deg, rgba(245, 210, 126, 0.25), rgba(226, 180, 90, 0.12));
+}
+.unlock-plan.gold,
+.account.gold,
+.saved-item.on {
+  background: linear-gradient(135deg, rgba(226, 180, 90, 0.14), rgba(226, 180, 90, 0.05));
+}
+.cmp-table .gc {
+  background: rgba(226, 180, 90, 0.08);
+}
+.gcb-day,
+.meal-slot,
+.swap-btn {
+  background: rgba(27, 27, 29, 0.96);
+}
+.plan-card.mine {
+  background: linear-gradient(180deg, rgba(63, 207, 142, 0.1), var(--paper) 40%);
+}
+.plan-emoji {
+  background: color-mix(in srgb, var(--pc) 22%, #141415);
+}
+
+/* ---------- карточки ---------- */
+.card-ph {
+  background: linear-gradient(135deg, #1d1d20, #141416);
+}
+.fav-btn {
+  background: rgba(12, 12, 13, 0.62);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.col-emoji,
+.owner-chip {
+  background: rgba(20, 20, 21, 0.9);
+  color: var(--ink);
+}
+.skeleton {
+  background: linear-gradient(90deg, #18181a 25%, #222225 50%, #18181a 75%);
+  background-size: 200% 100%;
+}
+.fake-line {
+  background: #2a2a2d;
+}
+
+/* ---------- состояния ---------- */
+.trust-box.tr-high {
+  background: rgba(63, 207, 142, 0.08);
+}
+.trust-box.tr-mid {
+  background: rgba(242, 184, 75, 0.08);
+}
+.why li {
+  background: rgba(63, 207, 142, 0.1);
+}
+.timer-btn:hover {
+  background: rgba(255, 106, 31, 0.25);
+}
+.form-err,
+.st-no,
+.mod-facts .mod-warn {
+  background: rgba(240, 68, 56, 0.12);
+  color: #ff8a80;
+}
+.add-form [aria-invalid='true'] {
+  background: rgba(240, 68, 56, 0.08) !important;
+}
+
+/* ---------- плашка «всё бесплатно» ---------- */
+.free-ribbon {
+  background: linear-gradient(90deg, rgba(255, 106, 31, 0.16), rgba(255, 106, 31, 0.06));
+  color: #ffb27a;
+  border-bottom: 1px solid rgba(255, 106, 31, 0.22);
+}
+
+/* поля ввода и селекты — графит */
+input,
+select,
+textarea {
+  color-scheme: dark;
+}
+
+/* ---------- активные элементы: светлое на чёрном → тёмный текст ---------- */
+.skip,
+.top-nav a.on,
+.chip.on,
+.f-opt.on,
+.day-tabs button.on,
+.vtabs button.on {
+  color: #0a0a0b;
+}
+.day-tabs button.on small {
+  color: rgba(10, 10, 11, 0.62);
+}
+.timer,
+.toast {
+  background: #232326;
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ---------- тексты, которые были тёмными на светлом ---------- */
+.unlock-ico,
+.cmp-table thead .gc {
+  color: var(--gold2);
+}
+.why li {
+  color: #7fe0b2;
+}
+.btn.danger,
+.add-err {
+  color: #ff8a80;
+}
+.nutri-m.p b {
+  color: #6fa8ff;
+}
+
+/* плитка категории: название целиком, счётчик под ним — слова не рвутся посередине */
+.cat {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 12px 14px;
+}
+.cat-emoji {
+  grid-row: 1 / 3;
+  align-self: center;
+}
+.cat-name {
+  min-width: 0;
+  align-self: end;
+}
+.cat-count {
+  align-self: start;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* режим готовки — чистый чёрный, как дисплей прибора */
+.cook {
+  background: radial-gradient(900px 500px at 50% 110%, rgba(255, 106, 31, 0.1), transparent 70%), #050505;
+}
+
+/* отличие рецептов с одинаковым названием */
+.card-sub {
+  margin: -2px 0 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* подзаголовок совета в шагах — без номера */
+.steps li.step-q {
+  counter-increment: none;
+  padding-left: 0;
+  font-weight: 800;
+  color: var(--accent2);
+}
+.steps li.step-q::before {
+  content: none;
+}

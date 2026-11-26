@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Бурмалдец</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c" title="Бурмалдец — нажмите и говорите (Ctrl+Alt+Пробел). Перетащите, чтобы передвинуть. Правая кнопка — меню."></canvas>
+<script>
+  // Шар Бурмалдеца на рабочем столе: неоновое кольцо, глаза, дыхание; слушает — пульсирует.
+  const cv = document.getElementById('c')
+  const g = cv.getContext('2d')
+  let phase = 'sleep'
+  let hover = false
+  window.bmOrb && bmOrb.onPhase((p) => (phase = p))
+  const resize = () => { const d = devicePixelRatio || 1; cv.width = innerWidth * d; cv.height = innerHeight * d }
+  resize(); addEventListener('resize', resize)
+  let down = false
+  cv.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; down = true; cv.setPointerCapture(e.pointerId); bmOrb.down() })
+  cv.addEventListener('pointermove', () => down && bmOrb.move())
+  cv.addEventListener('pointerup', (e) => { if (!down) return; down = false; bmOrb.up() })
+  cv.addEventListener('contextmenu', (e) => { e.preventDefault(); bmOrb.menu() })
+  cv.addEventListener('mouseenter', () => (hover = true))
+  cv.addEventListener('mouseleave', () => (hover = false))
+  const t0 = performance.now()
+  function frame(now) {
+    const t = (now - t0) / 1000
+    const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2
+    g.clearRect(0, 0, W, H)
+    const act = phase === 'listen' || phase === 'speak' || phase === 'think'
+    const r = W * 0.27 * (1 + (act ? 0.06 : 0.025) * Math.sin(t * (act ? 7 : 2.2))) * (hover ? 1.06 : 1)
+    // свечение
+    let gr = g.createRadialGradient(cx, cy, r * 0.6, cx, cy, r * 1.75)
+    gr.addColorStop(0, phase === 'listen' ? 'rgba(93,255,177,.45)' : phase === 'think' ? 'rgba(125,92,255,.55)' : 'rgba(125,92,255,.42)')
+    gr.addColorStop(0.5, 'rgba(60,231,255,.18)')
+    gr.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r * 1.75, 0, 7); g.fill()
+    // ядро
+    gr = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r)
+    gr.addColorStop(0, '#2e3478'); gr.addColorStop(0.6, '#111433'); gr.addColorStop(1, '#06071a')
+    g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill()
+    // вращающееся кольцо
+    const cg = g.createConicGradient ? g.createConicGradient(t * (act ? 4 : 1), cx, cy) : null
+    if (cg) { cg.addColorStop(0, '#3ce7ff'); cg.addColorStop(0.33, '#7d5cff'); cg.addColorStop(0.66, '#ff4fd8'); cg.addColorStop(1, '#3ce7ff') }
+    g.strokeStyle = cg || '#3ce7ff'; g.lineWidth = W * 0.035
+    g.beginPath(); g.arc(cx, cy, r, 0, 7); g.stroke()
+    // глаза
+    const blink = (t % 4.2) < 0.12 ? 0.15 : 1
+    g.fillStyle = '#fff'
+    for (const s of [-1, 1]) { g.beginPath(); g.ellipse(cx + s * r * 0.36, cy - r * 0.12, r * 0.15, r * 0.25 * blink, 0, 0, 7); g.fill() }
+    // рот: говорит — шевелится
+    const sm = phase === 'speak' ? r * (0.08 + 0.12 * Math.abs(Math.sin(t * 11))) : r * 0.08
+    g.strokeStyle = '#3ce7ff'; g.lineWidth = W * 0.028; g.lineCap = 'round'
+    g.beginPath(); g.ellipse(cx, cy + r * 0.22, r * 0.28, sm, 0, 0.15, Math.PI - 0.15); g.stroke()
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+</script>
+</body>
+</html>

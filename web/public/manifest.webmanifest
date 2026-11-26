@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "MyGrandChef — рецепты для ГрандШефа",
+  "short_name": "MyGrandChef",
+  "description": "Проверенные рецепты для мультишефа-аэрогриля ГрандШеф: режим, температура, время, таймеры и режим готовки.",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "/#/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0b",
+  "theme_color": "#0a0a0b",
+  "categories": ["food", "lifestyle"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Каталог", "url": "/#/catalog" },
+    { "name": "Холодильник", "url": "/#/fridge" },
+    { "name": "Список покупок", "url": "/#/list" }
+  ]
+}

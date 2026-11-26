@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- светящийся шар Бурмалдеца: неоновое кольцо, внутреннее свечение, глаза и улыбка -->
+    <path android:pathData="M54,28a26,26 0,1 1,0 52a26,26 0,1 1,0 -52Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="50" android:centerY="46" android:gradientRadius="30"
+                android:startColor="#FF2A2F6B" android:centerColor="#FF141634" android:endColor="#FF07081A" />
+        </aapt:attr>
+    </path>
+    <path android:strokeWidth="3.2" android:pathData="M54,28a26,26 0,1 1,0 52a26,26 0,1 1,0 -52Z">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="30" android:startY="30" android:endX="80" android:endY="80"
+                android:startColor="#FF3CE7FF" android:centerColor="#FF7D5CFF" android:endColor="#FFFF4FD8" />
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M45,49m-3.6,0a3.6,5 0,1 1,7.2 0a3.6,5 0,1 1,-7.2 0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M63,49m-3.6,0a3.6,5 0,1 1,7.2 0a3.6,5 0,1 1,-7.2 0" />
+    <path android:strokeColor="#FF3CE7FF" android:strokeWidth="2.6" android:strokeLineCap="round" android:pathData="M46,62Q54,68 62,62" />
+    <path android:fillColor="#553CE7FF" android:pathData="M40,36Q47,31 55,32Q46,35 42,41Z" />
+</vector>

@@ -1,0 +1,58 @@
+{
+  "name": "burmaldets-desktop",
+  "productName": "Бурмалдец",
+  "version": "2.0.0",
+  "description": "Бурмалдец (он же Чекунец) — голосовой ИИ-ассистент для Windows",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.burmaldets.desktop",
+    "productName": "Burmaldets",
+    "executableName": "Burmaldets",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "orb.html",
+      "pc.js",
+      "icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "vosk",
+        "to": "vosk"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "shortcutName": "Бурмалдец",
+      "artifactName": "Burmaldets-Setup-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "msedge-tts": "^2.1.1"
+  }
+}
