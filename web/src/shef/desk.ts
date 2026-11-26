@@ -3,6 +3,7 @@
 // Команду после него — облачное распознавание по вашему ключу (Groq/OpenAI Whisper или Gemini), без ключа — тоже Vosk.
 import type { KaldiRecognizer, Model } from 'vosk-browser'
 import { cloudStt, transcribe, verifyName } from './llm'
+import { LiveStt, liveSttReady } from './livestt'
 import { desk, isDesktop } from './net'
 import { afterWake, wakeEnd, norm, WAKE_WORDS } from './wake'
 
@@ -184,6 +185,8 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
       let done = false
       let voskText = ''
       let partial = ''
+      // главный распознаватель — как на сайте Gemini: потоковый Gemini 3.5 Transcribe (если есть ключ Gemini)
+      const live = !voskOnly && liveSttReady() ? new LiveStt((t) => onPartial?.(t)) : null
       const finish = async (how: string) => {
         if (done) return
         done = true
@@ -208,17 +211,19 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
           }
         }
         if (!wakeOn) micOffSoon()
-        if (how === 'cancel' || !speech) return resolve({ text: '', how: how === 'cancel' ? 'cancel' : 'тишина' })
+        if (how === 'cancel' || !speech) {
+          live?.close()
+          return resolve({ text: '', how: how === 'cancel' ? 'cancel' : 'тишина' })
+        }
         let text = ''
-        if (cloudStt() && !voskOnly) {
+        if (live) {
+          text = await live.end().catch(() => '')
+          if (text) how = 'gemini-transcribe'
+        }
+        // запасной путь: облако одним запросом (ждём его, а не слабый Vosk), потом уже Vosk
+        if (!text && cloudStt() && !voskOnly) {
           try {
-            // облако точнее, но если оно задумалось дольше 3 секунд, а Vosk уже разобрал фразу — не ждём
-            const local = () => (voskText || partial).trim().split(/\s+/).length >= 2
-            text = await Promise.race([
-              transcribe(toWav(frames)),
-              new Promise<string>((_, no) => setTimeout(() => no(new Error('slow')), 9000)),
-              new Promise<string>((_, no) => setTimeout(() => local() && no(new Error('vosk-faster')), 3000)),
-            ])
+            text = await Promise.race([transcribe(toWav(frames)), new Promise<string>((_, no) => setTimeout(() => no(new Error('slow')), 10000))])
             how = 'cloud'
           } catch (e) {
             console.warn('[bm] stt', e)
@@ -246,7 +251,7 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
             const p = (msg as { result: { partial: string } }).result.partial
             if (p) {
               partial = (voskText + ' ' + p).trim()
-              if (!cloudStt() || voskOnly) onPartial?.(partial)
+              if ((!cloudStt() && !live) || voskOnly) onPartial?.(partial)
             }
           })
           rec.on('result', (msg) => {
@@ -266,6 +271,7 @@ export function deskListen(onPartial: ((t: string) => void) | undefined, level: 
         if (done) return
         if (++nb === 1) note('first audio')
         frames.push(b)
+        live?.push(b)
         rec?.acceptWaveformFloat(b, RATE)
         const v = rms(b)
         level.value = Math.min(1, v * 12)

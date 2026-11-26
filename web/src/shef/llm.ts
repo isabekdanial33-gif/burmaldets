@@ -386,7 +386,7 @@ export async function ttsOpenAI(text: string, voice = 'onyx'): Promise<Blob> {
 // ---------- распознавание речи в облаке (компьютер) ----------
 /** Какой облачный распознаватель доступен по ключам: Groq/OpenAI (Whisper) или Gemini. */
 export function cloudStt(): ProviderId | null {
-  for (const id of ['groq', 'openai', 'gemini'] as ProviderId[]) if (keyFor(id)) return id
+  for (const id of ['gemini', 'openai', 'groq'] as ProviderId[]) if (keyFor(id)) return id
   return null
 }
 
